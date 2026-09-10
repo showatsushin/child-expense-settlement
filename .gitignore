@@ -5,3 +5,5 @@ coverage/
 
 dist/
 .env
+worker/.dev.vars
+worker/.wrangler/

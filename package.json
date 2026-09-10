@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
+    "test:worker": "npm --prefix worker test",
+    "test:all": "npm test && npm run test:worker",
     "dev": "node scripts/static-server.mjs . 8080",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/static-server.mjs dist 4173"

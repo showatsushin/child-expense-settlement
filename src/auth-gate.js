@@ -17,3 +17,4 @@ function showLogin(error = '') { document.body.style.visibility = 'visible'; doc
 
 export async function requireAuthenticatedUser() { showLoading(); if (!auth.configured) { showLogin('認証設定が未登録です。管理者へ連絡してください。'); return new Promise(() => {}); } try { const session = await auth.getSession(); if (session?.user) return session.user; showLogin(); return new Promise(() => {}); } catch (cause) { showLogin(cause.message || '認証状態を確認できませんでした。'); return new Promise(() => {}); } }
 export async function logout() { await auth.signOut(); location.reload(); }
+export async function getAccessToken() { return (await auth.getSession())?.access_token || null; }
