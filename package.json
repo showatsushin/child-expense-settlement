@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "dev": "node scripts/static-server.mjs . 8080",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/static-server.mjs dist 4173"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "^1.0.0",
