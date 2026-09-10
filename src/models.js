@@ -1,4 +1,4 @@
-export const SOURCE_TYPES = ['manual', 'ocr', 'ai', 'imported'];
+export const SOURCE_TYPES = ['manual', 'ocr', 'ocr_rule', 'template', 'ai', 'imported'];
 
 export function sourced(value = '', source = 'manual', confidence = null) {
   return { value, source: SOURCE_TYPES.includes(source) ? source : 'manual', confidence };
