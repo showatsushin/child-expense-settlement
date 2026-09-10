@@ -18,8 +18,13 @@ export function makeId(prefix) {
   return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
-export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString() } = {}) {
-  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt };
+export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr } = {}) {
+  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, ocr: normalizeOcr(ocr) };
+}
+
+export function normalizeOcr(ocr) {
+  const status = ['not_started', 'processing', 'completed', 'failed'].includes(ocr?.status) ? ocr.status : 'not_started';
+  return { status, rawText: String(ocr?.rawText || ''), correctedText: String(ocr?.correctedText || ''), processedAt: ocr?.processedAt || null, engine: String(ocr?.engine || ''), confidence: Number.isFinite(Number(ocr?.confidence)) ? Number(ocr.confidence) : null };
 }
 
 export function createExpenseRecord(data = {}) {

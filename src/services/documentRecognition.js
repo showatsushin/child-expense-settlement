@@ -1,3 +1,6 @@
-// Provider boundary for a future local/remote OCR adapter. Phase 1 intentionally makes no external call.
-export async function recognizeDocument() { return { status: 'not-implemented', suggestions: [] }; }
-
+export async function recognizeImage(file, onProgress = () => {}) {
+  if (!globalThis.Tesseract) throw new Error('OCRライブラリを読み込めませんでした。ローカルHTTPサーバーから開いてください。');
+  const worker = await globalThis.Tesseract.createWorker('jpn', 1, { workerPath: './node_modules/tesseract.js/dist/worker.min.js', corePath: './node_modules/tesseract.js-core/tesseract-core.wasm.js', langPath: './node_modules/@tesseract.js-data/jpn/4.0.0', logger: (m) => { if (m.status === 'recognizing text') onProgress(Math.round((m.progress || 0) * 100)); } });
+  try { const result = await worker.recognize(file); return { status: 'completed', rawText: result.data.text || '', correctedText: '', processedAt: new Date().toISOString(), engine: 'Tesseract.js (local jpn)', confidence: Number(result.data.confidence || 0) / 100 }; } finally { await worker.terminate(); }
+}
+export async function extractPdfText(file) { const pdfjs = await import('../../node_modules/pdfjs-dist/build/pdf.mjs'); pdfjs.GlobalWorkerOptions.workerSrc = './node_modules/pdfjs-dist/build/pdf.worker.min.mjs'; const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise; const pages = []; for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) { const page = await pdf.getPage(pageNo); const content = await page.getTextContent(); pages.push(content.items.map((item) => item.str).join(' ')); } return { status: 'completed', rawText: pages.join('\n'), correctedText: '', processedAt: new Date().toISOString(), engine: 'PDF.js text layer', confidence: null }; }

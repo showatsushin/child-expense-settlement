@@ -38,3 +38,13 @@ OCR・AI・クラウド同期・認証・Google連携・Excel/Wordネイティ�
 ## 計算方針
 
 相手負担想定額は `金額 × 相手負担率 / 100` を円単位で丸めます。未清算額は `相手負担想定額 − 既払い額` で、Phase 1では過払いの場合も表示・保存値を0円にします（既払い額そのものは保持します）。
+
+## Phase 2 実用PoC
+
+- 画像（JPG/JPEG/PNG）は、同梱した **Tesseract.js** と日本語学習データをブラウザ内で実行してOCRします。原本画像やOCR原文を外部送信しません。
+- PDFは **PDF.js** でPDF内のテキストレイヤーを抽出します。画像だけで構成されたPDFへのOCRはPhase 2では未実装です。
+- OCR結果は証拠の `ocr.rawText` として保持し、修正テキストは `ocr.correctedText` として分離します。候補をフォームへ反映しても登録はされず、人が保存して確定します。
+- Excel出力はローカルのSheetJSにより `.xlsx`（清算一覧・証拠一覧・集計）を、Word出力はローカルのdocxにより `.docx` の清算説明書を生成します。
+- Phase 1保存データは起動時にschema v2へmigrationされます。既存キーを維持し、証拠にはOCR用の初期値を補完します。
+
+Phase 2で追加したブラウザ用依存パッケージは `tesseract.js`、`@tesseract.js-data/jpn`、`@tesseract.js-data/eng`、`pdfjs-dist`、`xlsx`、`docx` です。`node_modules` を公開できるローカルHTTPサーバーから起動してください。例：`npx http-server -c-1`。

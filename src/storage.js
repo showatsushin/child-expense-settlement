@@ -1,6 +1,7 @@
-import { DEFAULT_CHILDREN, sanitizeExpenseRecords } from './models.js';
+import { DEFAULT_CHILDREN, sanitizeExpenseRecords, createEvidenceDocument } from './models.js';
+import { migratePhase1Data, SCHEMA_VERSION } from './migrations.js';
 
-const KEYS = { records: 'ces.records.v1', evidences: 'ces.evidences.v1', children: 'ces.children.v1' };
+const KEYS = { records: 'ces.records.v1', evidences: 'ces.evidences.v1', children: 'ces.children.v1', schemaVersion: 'ces.schemaVersion' };
 const DB_NAME = 'child-expense-settlement'; const STORE = 'files';
 
 function safeRead(key, fallback) {
@@ -10,8 +11,10 @@ function safeWrite(key, value) { localStorage.setItem(key, JSON.stringify(value)
 
 export const storage = {
   loadRecords: () => sanitizeExpenseRecords(safeRead(KEYS.records, [])), saveRecords: (items) => safeWrite(KEYS.records, items),
-  loadEvidences: () => safeRead(KEYS.evidences, []), saveEvidences: (items) => safeWrite(KEYS.evidences, items),
+  loadEvidences: () => safeRead(KEYS.evidences, []).filter((item) => item && typeof item === 'object').map(createEvidenceDocument), saveEvidences: (items) => safeWrite(KEYS.evidences, items),
   loadChildren: () => safeRead(KEYS.children, DEFAULT_CHILDREN), saveChildren: (items) => safeWrite(KEYS.children, items),
+  loadMigratedState: () => migratePhase1Data({ records: safeRead(KEYS.records, []), evidences: safeRead(KEYS.evidences, []), children: safeRead(KEYS.children, DEFAULT_CHILDREN), schemaVersion: Number(localStorage.getItem(KEYS.schemaVersion) || 1) }),
+  saveMigratedState: (state) => { safeWrite(KEYS.records, state.records); safeWrite(KEYS.evidences, state.evidences); safeWrite(KEYS.children, state.children); localStorage.setItem(KEYS.schemaVersion, String(SCHEMA_VERSION)); },
 };
 
 function openDb() {
