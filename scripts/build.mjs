@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const root = process.cwd();
@@ -7,8 +7,11 @@ const copy = (source, target = source) => cp(resolve(root, source), resolve(dist
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
-for (const file of ['index.html', 'styles.css', 'app.js', 'phase2.js']) await copy(file);
+const publicConfig = { supabaseUrl: process.env.VITE_SUPABASE_URL || null, supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || null };
+await writeFile(resolve(dist, 'config.js'), `globalThis.__APP_CONFIG__ = ${JSON.stringify(publicConfig)};`);
+for (const file of ['index.html', 'styles.css', 'phase2.js']) await copy(file);
 await copy('src');
+await copy('node_modules/@supabase/supabase-js/dist/umd/supabase.js');
 await copy('node_modules/xlsx/dist/xlsx.full.min.js');
 await copy('node_modules/docx/dist/index.iife.js');
 await copy('node_modules/tesseract.js/dist/tesseract.min.js');
