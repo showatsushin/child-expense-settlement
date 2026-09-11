@@ -15,7 +15,7 @@ const LEGAL_LANGUAGE = /(養育費として当然認められる|法的に負担
 const requestRates = new Map();
 let jwksCache = { until: 0, keySet: null };
 
-export class HttpError extends Error { constructor(status, code, message) { super(message); this.name = 'HttpError'; this.status = status; this.code = code; } }
+export class HttpError extends Error { constructor(status, code, message, diagnostic = {}) { super(message); this.name = 'HttpError'; this.status = status; this.code = code; this.diagnostic = diagnostic; } }
 const jsonHeaders = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const byteLength = (value) => new TextEncoder().encode(value).byteLength;
 const asText = (value, field, limit) => { if (value == null) return ''; if (typeof value !== 'string') throw new HttpError(400, 'MALFORMED_REQUEST', `${field} must be a string`); const trimmed = value.trim(); if (trimmed.length > limit) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', `${field} is too large`); return trimmed; };
@@ -28,8 +28,12 @@ function allowedOrigin(request, env) {
 }
 function corsHeaders(origin) { return origin ? { 'access-control-allow-origin': origin, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'authorization, content-type', 'access-control-max-age': '600', vary: 'Origin' } : {}; }
 function response(body, status, origin) { return new Response(JSON.stringify(body), { status, headers: { ...jsonHeaders, ...corsHeaders(origin) } }); }
-function errorResponse(error, origin) { const status = error instanceof HttpError ? error.status : 500; const code = error instanceof HttpError ? error.code : 'INTERNAL_ERROR'; return response({ error: { code, message: status >= 500 ? 'AI提案を取得できませんでした。ローカル候補は引き続き利用できます。' : error.message } }, status, origin); }
-function logResult({ requestId, status, startedAt, error }) { console.log(JSON.stringify({ event: 'suggest_expense', requestId, status, latencyMs: Date.now() - startedAt, model: MODEL_ID, ...(error ? { error } : {}) })); }
+const DIAGNOSTIC_STAGES = new Set(['route', 'auth', 'validation', 'ai_call', 'ai_response_received', 'json_parse', 'schema_validation', 'response_mapping', 'openai_call', 'openai_response_received', 'structured_output_parse']);
+const diagnosticText = (value) => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,80}$/.test(value) ? value : null;
+const diagnosticKeys = (value) => Array.isArray(value) ? value.filter((key) => diagnosticText(key)).slice(0, 20) : [];
+function diagnosticFor(error, fallbackStage) { const raw = error?.diagnostic || {}; return { stage: DIAGNOSTIC_STAGES.has(raw.stage) ? raw.stage : fallbackStage, upstreamStatus: Number.isInteger(raw.upstreamStatus) ? raw.upstreamStatus : null, errorClass: diagnosticText(error?.name) || 'Error', errorCode: diagnosticText(error?.code) || (error instanceof HttpError ? error.code : 'INTERNAL_ERROR'), schemaField: diagnosticText(raw.schemaField), responseKeys: diagnosticKeys(raw.responseKeys), timeout: Boolean(raw.timeout) }; }
+function errorResponse(error, origin, diagnostic) { const status = error instanceof HttpError ? error.status : 500; const code = error instanceof HttpError ? error.code : 'INTERNAL_ERROR'; return response({ error: { code, message: status >= 500 ? 'AI提案を取得できませんでした。ローカル候補は引き続き利用できます。' : error.message, stage: diagnostic.stage, requestId: diagnostic.requestId } }, status, origin); }
+function logResult({ requestId, route, provider, model, status, startedAt, diagnostic }) { console.log(JSON.stringify({ event: 'ai_diagnostic', route, requestId, status, latencyMs: Date.now() - startedAt, provider, model, stage: diagnostic.stage, errorClass: diagnostic.errorClass, errorCode: diagnostic.errorCode, ...(diagnostic.upstreamStatus != null ? { upstreamStatus: diagnostic.upstreamStatus } : {}), ...(diagnostic.schemaField ? { schemaField: diagnostic.schemaField } : {}), ...(diagnostic.responseKeys.length ? { responseKeys: diagnostic.responseKeys } : {}), ...(diagnostic.timeout ? { timeout: true } : {}) })); }
 function bearer(request) { const value = request.headers.get('Authorization') || ''; const match = /^Bearer\s+([^\s]+)$/i.exec(value); if (!match) throw new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required'); return match[1]; }
 
 export function validateInput(value) {
@@ -74,15 +78,17 @@ export async function verifySupabaseToken(token, env) {
   const user = await userResponse.json(); if (!user?.id) throw new HttpError(401, 'INVALID_TOKEN', 'Authentication is invalid'); return { sub: user.id, role: 'authenticated' };
 }
 function checkRateLimit(subject) { const now = Date.now(); const state = requestRates.get(subject); const next = !state || now - state.startedAt >= RATE_WINDOW_MS ? { startedAt: now, count: 1 } : { ...state, count: state.count + 1 }; requestRates.set(subject, next); if (next.count > RATE_LIMIT) throw new HttpError(429, 'RATE_LIMITED', 'Too many AI suggestion requests'); }
-function extractAiPayload(result) { const candidate = result?.response ?? result; if (typeof candidate === 'string') { try { return JSON.parse(candidate); } catch { throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI response is invalid'); } } if (!candidate || typeof candidate !== 'object') throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI response is invalid'); return candidate; }
+const aiResponseKeys = (value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).filter((key) => diagnosticText(key)).sort().slice(0, 20) : [];
+function aiResponseError(stage, schemaField, keys = []) { return new HttpError(502, 'AI_INVALID_RESPONSE', 'AI response is invalid', { stage, schemaField, responseKeys: keys }); }
+function extractAiPayload(result) { const candidate = result?.response ?? result; if (typeof candidate === 'string') { try { return JSON.parse(candidate); } catch { throw aiResponseError('json_parse', 'response', aiResponseKeys(result)); } } if (!candidate || typeof candidate !== 'object') throw aiResponseError('schema_validation', 'root', aiResponseKeys(result)); return candidate; }
 const confidence = (value) => Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1 ? Number(value) : 0;
-const safeText = (value, field, limit) => { if (typeof value !== 'string' || !value.trim() || value.trim().length > limit || LEGAL_LANGUAGE.test(value)) throw new HttpError(502, 'AI_INVALID_RESPONSE', `${field} is invalid`); return value.trim(); };
+const safeText = (value, field, limit) => { if (typeof value !== 'string' || !value.trim() || value.trim().length > limit || LEGAL_LANGUAGE.test(value)) throw aiResponseError('schema_validation', field); return value.trim(); };
 export function normalizeAiResponse(result) {
   const raw = extractAiPayload(result); const categoryInput = raw.categorySuggestion || {}; const categoryValid = ALLOWED_CATEGORIES.includes(categoryInput.value);
   const categorySuggestion = { value: categoryValid ? categoryInput.value : 'その他', confidence: categoryValid ? confidence(categoryInput.confidence) : 0, reason: categoryValid ? safeText(categoryInput.reason, 'category reason', MAX_SHORT_TEXT) : '既存の費目に一致しないため要確認' };
-  if (!Array.isArray(raw.reasonSuggestions)) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI reasons are invalid');
+  if (!Array.isArray(raw.reasonSuggestions)) throw aiResponseError('schema_validation', 'reasonSuggestions', aiResponseKeys(raw));
   const styles = ['concise', 'standard', 'detailed']; const byStyle = new Map(raw.reasonSuggestions.map((item) => [item?.style, item]));
-  const reasonSuggestions = styles.map((style) => { const item = byStyle.get(style); if (!item) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI reasons are incomplete'); return { style, value: safeText(item.value, `reason ${style}`, MAX_REASON_LENGTH), confidence: confidence(item.confidence) }; });
+  const reasonSuggestions = styles.map((style) => { const item = byStyle.get(style); if (!item) throw aiResponseError('schema_validation', 'reasonSuggestions.' + style, aiResponseKeys(raw)); return { style, value: safeText(item.value, 'reasonSuggestions.' + style, MAX_REASON_LENGTH), confidence: confidence(item.confidence) }; });
   const missingFields = Array.isArray(raw.missingFields) ? [...new Set(raw.missingFields.filter((field) => ['ocrText', 'correctedText', 'paidDate', 'vendor', 'amount', 'category', 'childLabel'].includes(field)))].slice(0, 7) : [];
   return { categorySuggestion, reasonSuggestions, missingFields, needsReview: Boolean(raw.needsReview) || !categoryValid };
 }
@@ -90,9 +96,9 @@ export function normalizeItemAiResponse(result) {
   const raw = extractAiPayload(result); const categoryInput = raw.categorySuggestion || {}; const categoryValid = ITEM_CATEGORIES.includes(categoryInput.value);
   const categorySuggestion = { value: categoryValid ? categoryInput.value : '\u305d\u306e\u4ed6', confidence: categoryValid ? confidence(categoryInput.confidence) : 0, reason: categoryValid ? safeText(categoryInput.reason, 'item category reason', MAX_SHORT_TEXT) : '\u5546\u54c1\u7a2e\u5225\u306b\u4e00\u81f4\u3057\u306a\u3044\u305f\u3081\u8981\u78ba\u8a8d' };
   const source = Array.isArray(raw.purposeSuggestions) ? raw.purposeSuggestions : raw.reasonSuggestions;
-  if (!Array.isArray(source)) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI purposes are invalid');
+  if (!Array.isArray(source)) throw aiResponseError('schema_validation', 'purposeSuggestions', aiResponseKeys(raw));
   const styles = ['concise', 'standard', 'detailed']; const byStyle = new Map(source.map((item) => [item?.style, item]));
-  const purposeSuggestions = styles.map((style) => { const item = byStyle.get(style); if (!item) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI purposes are incomplete'); return { style, value: safeText(item.value, 'purpose ' + style, MAX_REASON_LENGTH), confidence: confidence(item.confidence) }; });
+  const purposeSuggestions = styles.map((style) => { const item = byStyle.get(style); if (!item) throw aiResponseError('schema_validation', 'purposeSuggestions.' + style, aiResponseKeys(raw)); return { style, value: safeText(item.value, 'purposeSuggestions.' + style, MAX_REASON_LENGTH), confidence: confidence(item.confidence) }; });
   const missingFields = Array.isArray(raw.missingFields) ? [...new Set(raw.missingFields.filter((field) => ['productName', 'category', 'purchaseDate', 'vendor', 'ocrTextRelevantExcerpt', 'childLabel', 'existingContext'].includes(field)))].slice(0, 7) : [];
   return { categorySuggestion, purposeSuggestions, missingFields, needsReview: Boolean(raw.needsReview) || !categoryValid };
 }
@@ -105,35 +111,45 @@ function aiMessages(input) { return [{ role: 'system', content: 'あなたは子
 function withTimeout(promise) { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new HttpError(504, 'AI_TIMEOUT', 'AI request timed out')), AI_TIMEOUT_MS); })]).finally(() => clearTimeout(timer)); }
 
 export async function handleRequest(request, env, dependencies = {}) {
-  const requestId = crypto.randomUUID(); const startedAt = Date.now(); let origin = '';
+  const requestId = crypto.randomUUID(); const startedAt = Date.now(); let origin = '', route = 'unknown', provider = 'cloudflare_ai', model = MODEL_ID, stage = 'route';
   try {
     origin = allowedOrigin(request, env); const url = new URL(request.url); const itemRequest = url.pathname === '/suggest-item';
     const readerRequest = url.pathname === '/read-receipt';
+    route = readerRequest ? 'read_receipt' : itemRequest ? 'suggest_item' : url.pathname === '/suggest-expense' ? 'suggest_expense' : 'unknown';
     if (readerRequest) {
+      provider = 'openai'; model = env.OPENAI_RECEIPT_READER_MODEL || 'gpt-4.1-mini'; stage = 'route';
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
       if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
+      stage = 'validation';
+
       const contentLength = Number(request.headers.get('content-length') || 0); if (contentLength > MAX_RECEIPT_READER_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
       const bodyText = await request.text(); if (byteLength(bodyText) > MAX_RECEIPT_READER_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
       let body; try { body = JSON.parse(bodyText); } catch { throw new HttpError(400, 'MALFORMED_REQUEST', 'Request JSON is invalid'); }
       let input; try { input = validateReceiptReadInput(body); } catch (error) { throw new HttpError(/large/i.test(error.message) ? 413 : 400, /large/i.test(error.message) ? 'PAYLOAD_TOO_LARGE' : 'INVALID_RECEIPT_IMAGE', error.message); }
-      const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
+      stage = 'auth'; const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
+
       let normalized;
+      stage = 'openai_call';
+
       try { normalized = await (dependencies.readReceipt || readReceiptWithOpenAi)(input, env, { fetchImpl: dependencies.fetchOpenAi || fetch }); }
-      catch (error) { const code = error?.code || 'OPENAI_UNAVAILABLE'; const status = code === 'OPENAI_TIMEOUT' ? 504 : code === 'OPENAI_NOT_CONFIGURED' ? 503 : 502; throw new HttpError(status, code, 'High-accuracy receipt reading failed'); }
+
+      catch (error) { const code = error?.code || 'OPENAI_UNAVAILABLE'; const status = code === 'OPENAI_TIMEOUT' ? 504 : code === 'OPENAI_NOT_CONFIGURED' ? 503 : 502; throw new HttpError(status, code, 'High-accuracy receipt reading failed', error?.diagnostic || { stage }); }
       console.log(JSON.stringify({ event: 'read_receipt', provider: 'openai', requestId, status: 200, latencyMs: Date.now() - startedAt, model: normalized.metadata?.model || null, usage: normalized.metadata?.usage || null }));
       return response(normalized, 200, origin);
     }
     if (!itemRequest && url.pathname !== '/suggest-expense') throw new HttpError(404, 'NOT_FOUND', 'Not found');
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
     if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
+    stage = 'validation';
+
     const contentLength = Number(request.headers.get('content-length') || 0); if (contentLength > MAX_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
     const bodyText = await request.text(); if (byteLength(bodyText) > MAX_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
     let body; try { body = JSON.parse(bodyText); } catch { throw new HttpError(400, 'MALFORMED_REQUEST', 'Request JSON is invalid'); }
-    const input = itemRequest ? validateItemInput(body) : validateInput(body); const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
-    const run = dependencies.runAi || ((model, options) => env.AI.run(model, options));
+    const input = itemRequest ? validateItemInput(body) : validateInput(body); stage = 'auth'; const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
+    const run = dependencies.runAi || ((model, options) => env.AI.run(model, options)); stage = 'ai_call';
     const raw = await withTimeout(run(MODEL_ID, { messages: itemRequest ? itemAiMessages(input) : aiMessages(input), max_tokens: 320, temperature: 0.2, response_format: { type: 'json_schema', json_schema: itemRequest ? itemAiSchema() : aiSchema() } }));
-    const normalized = itemRequest ? normalizeItemAiResponse(raw) : normalizeAiResponse(raw); logResult({ requestId, status: 200, startedAt }); return response(normalized, 200, origin);
-  } catch (error) { const status = error instanceof HttpError ? error.status : 500; logResult({ requestId, status, startedAt, error: error?.name || 'Error' }); return errorResponse(error, origin); }
+    stage = 'ai_response_received'; const normalized = itemRequest ? normalizeItemAiResponse(raw) : normalizeAiResponse(raw); stage = 'response_mapping'; logResult({ requestId, route, provider, model, status: 200, startedAt, diagnostic: { stage, errorClass: 'None', errorCode: 'NONE', upstreamStatus: null, schemaField: null, responseKeys: [], timeout: false } }); return response(normalized, 200, origin);
+  } catch (error) { const status = error instanceof HttpError ? error.status : 500; const diagnostic = { ...diagnosticFor(error, stage), requestId }; logResult({ requestId, route, provider, model, status, startedAt, diagnostic }); return errorResponse(error, origin, diagnostic); }
 }
 
 export default { fetch(request, env) { return handleRequest(request, env); } };

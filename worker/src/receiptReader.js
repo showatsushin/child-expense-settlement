@@ -4,19 +4,28 @@ export const MAX_RECEIPT_READER_BODY_BYTES = 6 * 1024 * 1024;
 export const RECEIPT_IMAGE_MIME_TYPES = Object.freeze(['image/jpeg', 'image/png']);
 export const OPENAI_RECEIPT_READER_INSTRUCTIONS = `You are a receipt reader. Read only facts visibly supported by the single supplied receipt image. Never invent, infer, complete, or calculate a vendor, date, product, quantity, unit price, amount, or total. If any value is uncertain, return null and set needsReview to true. Never use the receipt total to fill an item amount. Never add a line that is not visibly present. Preserve the visible source line in sourceText. Do not return categories, purposes, medical necessity, submission decisions, cost sharing, or legal judgments.`;
 
+const responseKeys = (value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort().slice(0, 20) : [];
+export class ReceiptReaderError extends Error {
+  constructor(code, stage, { upstreamStatus = null, schemaField = null, responseKeys: keys = [], timeout = false } = {}) {
+    super(code); this.name = 'ReceiptReaderError'; this.code = code;
+    this.diagnostic = { stage, upstreamStatus: Number.isInteger(upstreamStatus) ? upstreamStatus : null, schemaField: schemaField || null, responseKeys: Array.isArray(keys) ? keys.slice(0, 20) : [], timeout: Boolean(timeout) };
+  }
+}
+const schemaError = (field) => new ReceiptReaderError('OPENAI_SCHEMA_INVALID', 'schema_validation', { schemaField: field });
+
 const text = (value, field, limit) => {
   if (value == null) return null;
-  if (typeof value !== 'string') throw new Error(`${field} must be a string or null`);
+  if (typeof value !== 'string') throw schemaError(field);
   const result = value.trim();
-  if (result.length > limit) throw new Error(`${field} is too long`);
+  if (result.length > limit) throw schemaError(field);
   return result || null;
 };
 const number = (value, field) => {
   if (value == null) return null;
-  if (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100_000_000) throw new Error(`${field} is invalid`);
+  if (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100_000_000) throw schemaError(field);
   return Number(value);
 };
-const confidence = (value) => value == null ? null : Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1 ? Number(value) : (() => { throw new Error('confidence is invalid'); })();
+const confidence = (value) => value == null ? null : Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1 ? Number(value) : (() => { throw schemaError('confidence'); })();
 const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
 export function receiptReaderSchema() {
@@ -55,12 +64,14 @@ function outputText(response) {
   if (typeof response?.output_text === 'string') return response.output_text;
   const content = response?.output?.flatMap((item) => item?.content || []).find((item) => item?.type === 'output_text');
   if (typeof content?.text === 'string') return content.text;
-  throw new Error('OpenAI response has no structured text');
+  throw new ReceiptReaderError('OPENAI_STRUCTURED_OUTPUT_MISSING', 'structured_output_parse', { responseKeys: responseKeys(response) });
 }
 
 export function normalizeOpenAiReceiptResponse(response) {
-  let parsed; try { parsed = JSON.parse(outputText(response)); } catch { throw new Error('OpenAI response is not valid structured JSON'); }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.items) || !Array.isArray(parsed.warnings)) throw new Error('OpenAI response has an invalid schema');
+  let parsed;
+  try { parsed = JSON.parse(outputText(response)); }
+  catch (error) { if (error instanceof ReceiptReaderError) throw error; throw new ReceiptReaderError('OPENAI_STRUCTURED_OUTPUT_INVALID', 'structured_output_parse', { responseKeys: responseKeys(response) }); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.items) || !Array.isArray(parsed.warnings)) throw new ReceiptReaderError('OPENAI_SCHEMA_INVALID', 'schema_validation', { schemaField: 'root', responseKeys: responseKeys(parsed) });
   const items = parsed.items.slice(0, 120).map((item) => ({ sourceText: text(item?.sourceText, 'sourceText', 1000), productName: text(item?.productName, 'productName', 240), quantity: number(item?.quantity, 'quantity'), unitPrice: number(item?.unitPrice, 'unitPrice'), amount: number(item?.amount, 'amount'), confidence: confidence(item?.confidence), needsReview: Boolean(item?.needsReview) }));
   const rawText = text(parsed.rawText, 'rawText', 16000) || '';
   const result = { provider: 'openai', rawText, vendor: text(parsed.vendor, 'vendor', 240), purchaseDate: text(parsed.purchaseDate, 'purchaseDate', 20), receiptTotalAmount: number(parsed.receiptTotalAmount, 'receiptTotalAmount'), items, warnings: [...new Set(parsed.warnings.map((warning) => text(warning, 'warning', 240)).filter(Boolean))].slice(0, 20) };
@@ -70,12 +81,19 @@ export function normalizeOpenAiReceiptResponse(response) {
 function usage(response) { const inputTokens = Number(response?.usage?.input_tokens); const outputTokens = Number(response?.usage?.output_tokens); const totalTokens = Number(response?.usage?.total_tokens); return { inputTokens: Number.isFinite(inputTokens) ? inputTokens : null, outputTokens: Number.isFinite(outputTokens) ? outputTokens : null, totalTokens: Number.isFinite(totalTokens) ? totalTokens : null }; }
 
 export async function readReceiptWithOpenAi(input, env, { fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
-  if (!env.OPENAI_API_KEY) { const error = new Error('OpenAI receipt reader is not configured'); error.code = 'OPENAI_NOT_CONFIGURED'; throw error; }
+  if (!env.OPENAI_API_KEY) throw new ReceiptReaderError('OPENAI_NOT_CONFIGURED', 'openai_call');
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, store: false, instructions: OPENAI_RECEIPT_READER_INSTRUCTIONS, input: [{ role: 'user', content: [{ type: 'input_text', text: 'Read this receipt image into the supplied schema. Return null for anything uncertain.' }, { type: 'input_image', image_url: input.imageDataUrl, detail: 'high' }] }], text: { format: { type: 'json_schema', name: 'receipt_reader_result', strict: true, schema: receiptReaderSchema() } }, max_output_tokens: 1200 }) });
-    if (!response.ok) { const error = new Error('OpenAI request failed'); error.code = 'OPENAI_REQUEST_FAILED'; throw error; }
-    const body = await response.json(); return { ...normalizeOpenAiReceiptResponse(body), metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body) } };
-  } catch (cause) { if (cause?.name === 'AbortError') { const error = new Error('OpenAI request timed out'); error.code = 'OPENAI_TIMEOUT'; throw error; } throw cause; }
+    if (!response.ok) throw new ReceiptReaderError('OPENAI_REQUEST_FAILED', 'openai_call', { upstreamStatus: response.status });
+    let body;
+    try { body = await response.json(); }
+    catch { throw new ReceiptReaderError('OPENAI_STRUCTURED_OUTPUT_INVALID', 'structured_output_parse'); }
+    try { return { ...normalizeOpenAiReceiptResponse(body), metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body) } }; }
+    catch (error) {
+      if (error instanceof ReceiptReaderError) throw error;
+      throw new ReceiptReaderError('OPENAI_RESPONSE_MAPPING_FAILED', 'response_mapping', { responseKeys: responseKeys(body) });
+    }
+  } catch (cause) { if (cause?.name === 'AbortError') throw new ReceiptReaderError('OPENAI_TIMEOUT', 'openai_call', { timeout: true }); if (cause instanceof ReceiptReaderError) throw cause; throw new ReceiptReaderError('OPENAI_REQUEST_FAILED', 'openai_call'); }
   finally { clearTimeout(timer); }
 }
