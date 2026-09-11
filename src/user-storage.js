@@ -4,7 +4,8 @@ import { migratePhase1Data, SCHEMA_VERSION } from './migrations.js';
 export const namespaceForUser = (userId) => `child-expense-settlement:${encodeURIComponent(userId)}:`;
 const read = (key, fallback) => { try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : fallback; } catch { return fallback; } };
 const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
-function databaseName(userId) { return `child-expense-settlement:${encodeURIComponent(userId)}`; }
+export function databaseNameForUser(userId) { return `child-expense-settlement:${encodeURIComponent(userId)}`; }
+function databaseName(userId) { return databaseNameForUser(userId); }
 function openDb(userId) { return new Promise((resolve, reject) => { const request = indexedDB.open(databaseName(userId), 1); request.onupgradeneeded = () => request.result.createObjectStore('files'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 
 export function createUserStorage(userId) {

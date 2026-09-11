@@ -44,7 +44,18 @@ OCR・AI・クラウド同期・認証・Google連携・Excel/Wordネイティ�
 - 画像（JPG/JPEG/PNG）は、同梱した **Tesseract.js** と日本語学習データをブラウザ内で実行してOCRします。原本画像やOCR原文を外部送信しません。
 - PDFは **PDF.js** でPDF内のテキストレイヤーを抽出します。画像だけで構成されたPDFへのOCRはPhase 2では未実装です。
 - OCR結果は証拠の `ocr.rawText` として保持し、修正テキストは `ocr.correctedText` として分離します。候補をフォームへ反映しても登録はされず、人が保存して確定します。
-- Excel出力はローカルのSheetJSにより `.xlsx`（清算一覧・証拠一覧・集計）を、Word出力はローカルのdocxにより `.docx` の清算説明書を生成します。
-- Phase 1保存データは起動時にschema v2へmigrationされます。既存キーを維持し、証拠にはOCR用の初期値を補完します。
+- XLSX output now contains Settlement, Purchase Items, Category Summary, Evidence List, and Summary sheets; DOCX includes receipt and purchase-item rows with evidence numbers.
+- Phase 1/2 saved data migrates safely to schema v3: each legacy ExpenseRecord becomes one receipt header with one item, retaining evidence numbers and original values.
 
 Phase 2で追加したブラウザ用依存パッケージは `tesseract.js`、`@tesseract.js-data/jpn`、`@tesseract.js-data/eng`、`pdfjs-dist`、`xlsx`、`docx` です。`node_modules` を公開できるローカルHTTPサーバーから起動してください。例：`npx http-server -c-1`。
+## Receipt items and evidence submission
+
+Each ExpenseRecord now acts as a backward-compatible receipt header and can contain multiple purchase items. Every item has a submission-only category, purpose/necessity text, and a user-selected submission state: `included`, `excluded`, or `review`.
+
+The printed receipt total, item total, and included-item claim total are separate values. A non-zero difference between the receipt total and item total is shown for review and is never corrected automatically.
+
+Original JPG/JPEG/PNG/PDF files remain in the authenticated user's browser IndexedDB namespace. The submission view can print the settlement material and image originals together. PDF originals are explicitly listed as separate originals with an open link; they are not falsely described as embedded in the printout. ZIP export is not included.
+
+CSV now provides receipt-summary.csv and receipt-items.csv. XLSX includes Settlement, Purchase Items, Category Summary, Evidence List, and Summary sheets. DOCX includes receipt and purchase-item rows with evidence numbers.
+
+Device-local storage does not synchronize automatically when the device or browser changes. AI proposals use only the selected item's entered text and OCR excerpt; original files, PDFs, images, and the ledger are never sent. AI is a factual drafting aid only: it does not make legal decisions or determine whether an item should be submitted.

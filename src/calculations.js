@@ -37,3 +37,11 @@ export function calculateSummary(records) {
   }, { count: 0, amount: 0, other: 0, paid: 0, outstanding: 0, review: 0 });
 }
 
+
+export function money(value) { const number = Number(value); return Number.isFinite(number) ? Math.round((number + Number.EPSILON) * 100) / 100 : 0; }
+export function receiptItemTotal(record) { return money((Array.isArray(record?.items) ? record.items : []).reduce((total, item) => total + Math.max(0, Number(item?.amount) || 0), 0)); }
+export function receiptClaimTotal(record) { return money((Array.isArray(record?.items) ? record.items : []).filter((item) => item?.submissionStatus === 'included').reduce((total, item) => total + Math.max(0, Number(item?.amount) || 0), 0)); }
+export function receiptTotal(record) { return money(record?.receiptTotalAmount ?? record?.amount?.value ?? record?.amount ?? 0); }
+export function receiptDifference(record) { return money(receiptTotal(record) - receiptItemTotal(record)); }
+export function categorySubtotals(records) { const totals = new Map(); (Array.isArray(records) ? records : []).forEach((record) => (record.items || []).forEach((item) => { if (item?.submissionStatus !== 'included') return; const category = String(item.category || 'その他'); totals.set(category, money((totals.get(category) || 0) + Math.max(0, Number(item.amount) || 0))); })); return [...totals.entries()].sort(([left], [right]) => left.localeCompare(right, 'ja')).map(([category, amount]) => ({ category, amount })); }
+export function calculateReceiptSummary(records) { const source = Array.isArray(records) ? records : []; return { receiptCount: source.length, receiptTotalAmount: money(source.reduce((total, record) => total + receiptTotal(record), 0)), itemTotalAmount: money(source.reduce((total, record) => total + receiptItemTotal(record), 0)), claimTotalAmount: money(source.reduce((total, record) => total + receiptClaimTotal(record), 0)), categorySubtotals: categorySubtotals(source) }; }
