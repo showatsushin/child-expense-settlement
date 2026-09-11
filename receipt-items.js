@@ -2,6 +2,7 @@ import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
 import {
   applySelectedKnowledge,
+  hasManualKnowledgeFields,
   knowledgeCandidatesForProduct,
   selectedKnowledge,
 } from './src/services/purchasePurposeSelection.js';
@@ -140,7 +141,12 @@ function update(id, field, value) {
 function selectKnowledge(id, key) {
   const index = items.findIndex((item) => item.id === id);
   if (index < 0) return;
-  items[index] = applySelectedKnowledge(items[index], key);
+  const current = items[index];
+  if (key && hasManualKnowledgeFields(current)) {
+    const confirmed = window.confirm('\u73fe\u5728\u306e\u5165\u529b\u5185\u5bb9\u3092\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f\n\u9078\u629e\u3057\u305fKnowledge\u306e\u539f\u6587\u3068\u7a2e\u5225\u3092\u521d\u671f\u5024\u3068\u3057\u3066\u53cd\u6620\u3057\u307e\u3059\u3002');
+    if (!confirmed) { render(); return; }
+  }
+  items[index] = applySelectedKnowledge(current, key);
   render();
 }
 

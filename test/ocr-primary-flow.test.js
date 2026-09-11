@@ -15,6 +15,8 @@ test('receipt items expose primary OCR application and human Knowledge selection
   assert.match(items, /applyOcrCandidates/);
   assert.match(items, /data-knowledge-key/);
   assert.match(items, /sourceExcerpt/);
+  assert.match(items, /hasManualKnowledgeFields/);
+  assert.match(items, /window\.confirm/);
   assert.doesNotMatch(items, /suggestAiItem/);
   assert.doesNotMatch(items, /data-category-proposal/);
   assert.doesNotMatch(html, /reason-suggestions\.js/);
