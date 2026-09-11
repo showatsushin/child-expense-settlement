@@ -1,68 +1,20 @@
-// Canonical, user-confirmed purchase-purpose material.  This is deliberately
-// separate from UI labels and from the product-name matching helper.
-export const PURCHASE_PURPOSE_KNOWLEDGE_VERSION = 1;
-
+export const PURCHASE_PURPOSE_KNOWLEDGE_VERSION = 2;
+const documentSource = 'user_confirmed_document';
+const confirmedDocument = '各購入目的';
+const entry = (data) => Object.freeze({ ...data, aliases: data.aliases || [], sourceAliases: data.sourceAliases || data.aliases || [], matchingAliases: data.matchingAliases || data.aliases || [], purposeFacts: data.purposeFacts || [], authorityFacts: data.authorityFacts || [], separationFacts: data.separationFacts || [], notes: data.notes || [], version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION });
 export const PURCHASE_PURPOSE_KNOWLEDGE = Object.freeze([
-  {
-    key: 'drinking_water', category: '飲料水',
-    aliases: ['飲料水', '水', 'ミネラルウォーター', 'いろはす', 'ペットボトル水'],
-    purposeFacts: ["本人用の飲料水として購入","強度行動障害による問題行為により飲料水がなくなるため、補充として購入"],
-    authorityFacts: [], separationFacts: ["母親分は別購入・別管理"], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'rehabilitation_training', category: 'リハビリ・機能訓練用品',
-    aliases: ['絵本', 'シール', 'シールブック', 'シール遊び', 'パズル', '折り紙', 'お絵かき', '玩具'],
-    purposeFacts: ['脳症後のリハビリ', '機能回復', '手指運動', '巧緻性', '注意・集中', '眼と手の協働', '視覚認知への刺激'],
-    authorityFacts: ['医師から使用するよう指示あり'], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'food', category: '食料品', aliases: ['クッキー', '食品', '食料品', 'お菓子'],
-    purposeFacts: ['治療に伴う食欲増進等への対応', '空腹による症状悪化・問題行動への対応'],
-    authorityFacts: ['医師・看護師長の許可あり', '持込可能食品'], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'medication_aid', category: '服薬補助用品', aliases: ['服薬ゼリー', '服薬用ゼリー', 'お薬ゼリー', '服薬補助ゼリー'],
-    purposeFacts: ['服薬負担軽減', '確実な服薬', '苦みの軽減'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'bathing_aid', category: '入浴補助用品', aliases: ['バスボム', '入浴剤'],
-    purposeFacts: ['入浴への抵抗感軽減', '入浴促進', '入浴時パニックへの対応', '他害・自傷への対応'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'recovery_entertainment', category: '療養・介助用品', aliases: ['DVD', 'DVDソフト', '映像ソフト'],
-    purposeFacts: ['不安軽減', '情緒安定', '気分転換'], authorityFacts: ['看護師・カウンセラーからの勧め'], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'mask_hygiene', category: '衛生用品', aliases: ['マスク', '小児用マスク'],
-    purposeFacts: ['院内着用義務への対応'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'bandage_hygiene', category: '衛生用品', aliases: ['絆創膏', 'ばんそうこう'],
-    purposeFacts: ['自傷による傷の保護', '傷をかきむしる行為への対応'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'general_hygiene', category: '衛生用品', aliases: [],
-    purposeFacts: ['入浴', '清潔保持'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'storage', category: '収納用品', aliases: ['収納', '収納用品', 'ケース', 'ボックス'],
-    purposeFacts: ['環境変化への戸惑い軽減', '衣類・薬・オムツ・日用品等の整理保管', '自宅と同様の整理方法維持'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
-  {
-    key: 'companion_bedding', category: '付き添い寝具レンタル', aliases: ['付き添い寝具', '寝具レンタル'],
-    purposeFacts: ['衛生管理', '汚損時の交換可能性'], authorityFacts: [], separationFacts: [], notes: [],
-    source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
-  },
+  entry({ key: 'drinking_water', category: '飲料水', aliases: ['飲料水', '水', 'ミネラルウォーター', 'いろはす', 'ペットボトル水'], purposeFacts: ['本人用の飲料水として購入', '問題行為で飲料水がなくなったため購入'], separationFacts: ['母（鈴木さゆり）分は別途購入・別管理・主人へ未請求'], sourceDocument: confirmedDocument, sourceSection: '飲料水', source: documentSource, sourceExcerpt: '娘の強度行動障害による酷い暴れが出て、毎日3本購入しているペットボトル全ての飲料水を自分に掛けたり、床にながしたり等の問題行為で無くなってしまったため、娘の飲料水用として購入。\n※母(鈴木さゆり)の分は別途購入しており、主人へは未請求。レシートも別管理・保管済。' }),
+  entry({ key: 'rehabilitation_training', category: 'リハビリ・機能訓練用品', aliases: ['絵本', 'シール', 'シールブック', 'シール遊び', 'パズル', '折り紙', 'お絵かき', '玩具'], purposeFacts: ['脳症後のリハビリ', '機能回復', '手指運動', '巧緻性', '注意・集中', '眼と手の協働', '視覚認知等への刺激'], authorityFacts: ['医師から使用するよう指示あり'], sourceDocument: confirmedDocument, sourceSection: 'リハビリ・機能訓練用品', source: documentSource, sourceExcerpt: '医師から脳症後のリハビリと機能回復のために、絵本・シールあそび・パズル、折り紙、お絵かき、玩具を使用した遊びを含む頭・目・手(指先)を使うことを積極的に行う事で、手指の運動機能や巧緻性だけでなく、注意・集中等の機能への刺激・眼と手の協働、視覚認知等への刺激を促すことを目的として使用するよう指示があったため、購入。' }),
+  entry({ key: 'food', category: '食料品', aliases: ['クッキー', '食品', '食料品', 'お菓子'], purposeFacts: ['ステロイド治療による食欲増進', '空腹に伴う問題への対応'], authorityFacts: ['医師・看護師長の許可あり', '持ち込み可能食品'], sourceDocument: confirmedDocument, sourceSection: '食料品', source: documentSource, sourceExcerpt: 'ステロイド治療による食欲増進に伴い、空腹に耐えられないことで強度行動障害による自傷行為、他害行為、破壊行為、ストレス負荷による顔面ひきつけ等の不随意運動症状が現れるため、医師・看護師長の許可を得たうえで持ち込み可能な食品を購入。' }),
+  entry({ key: 'medication_aid', category: '服薬補助用品', aliases: ['服薬ゼリー', '服薬用ゼリー', 'お薬ゼリー', '服薬補助ゼリー'], purposeFacts: ['苦みのある薬の服薬補助', '服薬時の負担軽減', '確実な服薬'], sourceDocument: confirmedDocument, sourceSection: '服薬補助用品（苦みあり）', source: documentSource, sourceExcerpt: '苦みのある薬を服薬する際の補助として購入。小児薬の中で最も苦味が強いとされている薬を服薬しなければならず、本人の服薬時の負担軽減及び確実に服薬できるよう使用した。' }),
+  entry({ key: 'medication_aid_general', category: '服薬補助用品', aliases: ['服薬補助'], purposeFacts: ['服薬時の負担軽減', '確実な服薬'], sourceDocument: confirmedDocument, sourceSection: '服薬補助用品（一般）', source: documentSource, sourceExcerpt: '服薬する際の補助として購入。本人の服薬時の負担軽減及び確実に服薬できるよう使用した。' }),
+  entry({ key: 'medication_aid_non_bitter', category: '服薬補助用品', aliases: ['苦味の無い粉薬', '苦味のない粉薬', '粉薬', 'シロップ', '服薬補助'], purposeFacts: ['苦味の無い粉薬・シロップの服薬補助', '本人の負担軽減', '確実な服薬'], sourceDocument: '利用者追加確定入力', sourceSection: '服薬補助用品（今回追加）', source: 'user_confirmed_input', sourceExcerpt: '苦味の無い粉薬・シロップを服薬する際、\n本人の負担軽減および確実に服薬することを目的として購入。' }),
+  entry({ key: 'bathing_aid', category: '入浴補助用品', aliases: ['バスボム', '入浴剤'], purposeFacts: ['入浴への抵抗感軽減', '入浴を促す', '入浴時のパニック・他害・自傷行為への対策'], sourceDocument: confirmedDocument, sourceSection: '入浴補助用品（バスボム）', source: documentSource, sourceExcerpt: '自閉症特性にある過去の失敗体験をきっかけとして入浴拒否が生じており、本人の入浴の抵抗感を軽減し、入浴を促す目的で購入。\nまた、入浴時間になるとパニック・他害行為・自傷行為及びストレスを発端として自己免疫介在性脳炎の症状(不随意運動・痙攣)も出てしまう為の対策として購入。' }),
+  entry({ key: 'recovery_entertainment', category: '療養・介助用品', aliases: ['DVD', 'DVDソフト', '映像ソフト'], purposeFacts: ['不安軽減', '情緒の安定', '気分転換'], authorityFacts: ['看護師やカウンセラーからの勧め'], sourceDocument: confirmedDocument, sourceSection: '療養・介助用品（DVDソフト）', source: documentSource, sourceExcerpt: 'ICU期間中、面会時間後、本人がひとりでも好きな映像を視聴することで、不安軽減・情緒の安定、気分転換を図るため、看護師やカウンセラーからの勧めがあったため購入。' }),
+  entry({ key: 'mask_hygiene', category: '衛生用品', aliases: ['マスク', '小児用マスク'], purposeFacts: ['院内での着用義務への対応'], sourceDocument: confirmedDocument, sourceSection: '衛生用品（マスク）', source: documentSource, sourceExcerpt: '院内での着用義務があるため購入。' }),
+  entry({ key: 'bandage_hygiene', category: '衛生用品', aliases: ['絆創膏', 'ばんそうこう'], purposeFacts: ['自傷行為による傷の保護', '傷をかきむしることへの対応'], sourceDocument: confirmedDocument, sourceSection: '絆創膏', source: documentSource, sourceExcerpt: '自傷行為による傷の保護用。\n自閉症特性によるこだわりから、好きなキャラクター以外の貼り付けを拒否し、傷をかきむしるため購入。' }),
+  entry({ key: 'general_hygiene', category: '衛生用品', aliases: [], purposeFacts: ['入浴', '清潔保持'], sourceDocument: confirmedDocument, sourceSection: '衛生用品', source: documentSource, sourceExcerpt: '娘の入院に伴い、入浴・清潔保持のため購入。' }),
+  entry({ key: 'storage', category: '収納用品', aliases: ['収納', '収納用品', 'ケース', 'ボックス'], purposeFacts: ['環境変化への戸惑い軽減', '衣類・薬・オムツ・日用品等の整理・保管', '自宅と同様の方法'], sourceDocument: confirmedDocument, sourceSection: '収納用品', source: documentSource, sourceExcerpt: '自閉症特性による環境変化への戸惑いを軽減するため、自宅と同様の方法で衣類・薬・オムツ、日用品等を整理、保管することを目的として購入。' }),
+  entry({ key: 'companion_bedding', category: '付き添い寝具レンタル', aliases: ['付き添い寝具', '寝具レンタル'], purposeFacts: ['衛生管理', '汚損時に都度交換可能'], sourceDocument: confirmedDocument, sourceSection: '付き添い寝具レンタル', source: documentSource, sourceExcerpt: '※娘が枕と掛け布団使用し、治療による副作用で嘔吐、障害特性による問題行為で汚した場合でも都度交換可能なため、衛生管理を目的として利用。' }),
 ]);
-
-export const purchasePurposeKnowledgeByKey = (key) => PURCHASE_PURPOSE_KNOWLEDGE.find((entry) => entry.key === key) || null;
+export const purchasePurposeKnowledgeByKey = (key) => PURCHASE_PURPOSE_KNOWLEDGE.find((item) => item.key === key) || null;
