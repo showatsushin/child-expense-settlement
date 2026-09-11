@@ -25,11 +25,41 @@ export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber
   return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
 }
 
-export function normalizeOcr(ocr) {
-  const status = ['not_started', 'processing', 'completed', 'failed'].includes(ocr?.status) ? ocr.status : 'not_started';
-  return { status, rawText: String(ocr?.rawText || ''), correctedText: String(ocr?.correctedText || ''), processedAt: ocr?.processedAt || null, engine: String(ocr?.engine || ''), confidence: Number.isFinite(Number(ocr?.confidence)) ? Number(ocr.confidence) : null };
+function normalizePreprocessing(value) {
+  if (!value || typeof value !== 'object') return null;
+  const number = (input) => Number.isFinite(Number(input)) ? Number(input) : null;
+  return { applied: Boolean(value.applied), mode: String(value.mode || 'original').slice(0, 80), width: number(value.width), height: number(value.height), scale: number(value.scale) };
+}
+function normalizeItemExtraction(value) {
+  if (!value || typeof value !== 'object') return null;
+  const number = (input, fallback = 0) => Number.isFinite(Number(input)) ? Number(input) : fallback;
+  const nullableNumber = (input) => Number.isFinite(Number(input)) ? Number(input) : null;
+  return {
+    status: ['success', 'partial', 'low_confidence', 'failed'].includes(value.status) ? value.status : 'failed',
+    candidateCount: Math.max(0, Math.floor(number(value.candidateCount))),
+    lowConfidenceCount: Math.max(0, Math.floor(number(value.lowConfidenceCount))),
+    lineCount: Math.max(0, Math.floor(number(value.lineCount))),
+    monetaryLineCount: Math.max(0, Math.floor(number(value.monetaryLineCount))),
+    receiptTotalAmount: nullableNumber(value.receiptTotalAmount),
+    itemTotalAmount: number(value.itemTotalAmount),
+    difference: nullableNumber(value.difference),
+    totalConsistent: Boolean(value.totalConsistent)
+  };
 }
 
+export function normalizeOcr(ocr) {
+  const status = ['not_started', 'processing', 'completed', 'failed'].includes(ocr?.status) ? ocr.status : 'not_started';
+  return {
+    status,
+    rawText: String(ocr?.rawText || ''),
+    correctedText: String(ocr?.correctedText || ''),
+    processedAt: ocr?.processedAt || null,
+    engine: String(ocr?.engine || ''),
+    confidence: Number.isFinite(Number(ocr?.confidence)) ? Number(ocr.confidence) : null,
+    preprocessing: normalizePreprocessing(ocr?.preprocessing),
+    itemExtraction: normalizeItemExtraction(ocr?.itemExtraction)
+  };
+}
 export function createExpenseRecord(data = {}) {
   const now = new Date().toISOString();
   const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -56,7 +86,7 @@ export function createExpenseRecord(data = {}) {
 export function createReceiptItem(data = {}, receiptId = '') {
   const now = new Date().toISOString(); const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
   const category = ITEM_CATEGORY_OPTIONS.includes(data.category) ? data.category : 'その他'; const submissionStatus = SUBMISSION_STATUS_OPTIONS.includes(data.submissionStatus) ? data.submissionStatus : 'review';
-  return { id: data.id || makeId('receipt-item'), receiptId: String(data.receiptId || receiptId || ''), lineOrder: Math.max(1, Math.floor(number(data.lineOrder, 1))), productName: String(data.productName || ''), quantity: Math.max(0, number(data.quantity, 1)), unitPrice: Math.max(0, number(data.unitPrice, 0)), amount: Math.max(0, number(data.amount, 0)), category, purpose: sourced(data.purpose?.value ?? data.purpose ?? '', data.purpose?.source, data.purpose?.confidence ?? null), submissionStatus, source: SOURCE_TYPES.includes(data.source) ? data.source : 'manual', confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null, basis: Array.isArray(data.basis) ? data.basis.filter((item) => typeof item === 'string').map(String).slice(0, 12) : [], notes: String(data.notes || ''), createdAt: data.createdAt || now, updatedAt: now };
+  return { id: data.id || makeId('receipt-item'), receiptId: String(data.receiptId || receiptId || ''), lineOrder: Math.max(1, Math.floor(number(data.lineOrder, 1))), productName: String(data.productName || ''), quantity: Math.max(0, number(data.quantity, 1)), unitPrice: Math.max(0, number(data.unitPrice, 0)), amount: Math.max(0, number(data.amount, 0)), category, purpose: sourced(data.purpose?.value ?? data.purpose ?? '', data.purpose?.source, data.purpose?.confidence ?? null), submissionStatus, source: SOURCE_TYPES.includes(data.source) ? data.source : 'manual', confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null, basis: Array.isArray(data.basis) ? data.basis.filter((item) => typeof item === 'string').map(String).slice(0, 12) : [], sourceLineNumbers: Array.isArray(data.sourceLineNumbers) ? data.sourceLineNumbers.map(Number).filter(Number.isInteger).filter((value) => value > 0).slice(0, 20) : [], sourceLines: Array.isArray(data.sourceLines) ? data.sourceLines.filter((line) => typeof line === 'string').map(String).slice(0, 20) : [], notes: String(data.notes || ''), createdAt: data.createdAt || now, updatedAt: now };
 }
 export function sanitizeReceiptItems(value, receiptId = '') { return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object').map((item, index) => createReceiptItem({ ...item, lineOrder: item.lineOrder ?? index + 1 }, receiptId)) : []; }
 export function sanitizeExpenseRecords(value) {

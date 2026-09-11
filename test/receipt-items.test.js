@@ -25,3 +25,9 @@ test('item AI context contains selected-item text only and never sends originals
 test('user-specific IndexedDB names cannot collide across users', () => { assert.notEqual(databaseNameForUser('user-a'),databaseNameForUser('user-b')); assert.match(databaseNameForUser('user-a'),/user-a$/); });
 
 test('item AI sends only selected item context and returns item category and purposes', async () => { let called; const response = { categorySuggestion:{ value:'\u98f2\u6599\u6c34',confidence:.8,reason:'product name'}, purposeSuggestions:['concise','standard','detailed'].map((style) => ({ style,value:'draft '+style,confidence:.7 })), missingFields:[],needsReview:false }; const result = await suggestAiItem({ productName:'water',category:'\u98f2\u6599\u6c34',ocrTextRelevantExcerpt:'water 120' },{ paidDate:'2026-01-01',vendor:'shop' },'child',{ accessToken:'token',workerUrl:'https://worker.example',fetchImpl:async(url,init) => { called={url,init}; return new Response(JSON.stringify(response),{status:200}); } }); assert.equal(called.url,'https://worker.example/suggest-item'); assert.deepEqual(Object.keys(JSON.parse(called.init.body)).sort(),['category','childLabel','existingContext','ocrTextRelevantExcerpt','productName','purchaseDate','vendor']); assert.equal(result.categorySuggestion.value,'\u98f2\u6599\u6c34'); assert.equal(result.purposeSuggestions.length,3); });
+
+test('saved receipt item preserves OCR source lines for audit', () => {
+  const item = createReceiptItem({ productName: 'water', amount: 100, sourceLineNumbers: [3, 4, 0, 'bad'], sourceLines: ['water', '100'] });
+  assert.deepEqual(item.sourceLineNumbers, [3, 4]);
+  assert.deepEqual(item.sourceLines, ['water', '100']);
+});
