@@ -9,6 +9,66 @@ const templates = { '\u4ed8\u304d\u6dfb\u3044\u5bdd\u5177\u30ec\u30f3\u30bf\u30e
 
 export function suggestItemPurposes(item = {}) { const category = text(item.category) || '\u305d\u306e\u4ed6'; const product = text(item.productName); const basis = [...(product ? ['productName: ' + product] : []), 'category: ' + category]; const concise = templates[category] || templates['\u305d\u306e\u4ed6']; return [{ style:'concise',value:concise,source:'template',confidence:1,basis },{ style:'standard',value:product ? product + '\u3092\u3001' + concise : concise,source:'template',confidence:1,basis },{ style:'detailed',value:product ? product + '\u306b\u3064\u3044\u3066\u3001' + concise + '\u5185\u5bb9\u306f\u539f\u672c\u8a3c\u62e0\u3068\u5165\u529b\u5185\u5bb9\u3092\u78ba\u8a8d\u3057\u3066\u6574\u7406\u3059\u308b\u3002' : concise,source:'template',confidence:1,basis }]; }
 
-export function toAiItemContext(item = {}, receipt = {}, childLabel = '') { return { productName:limit(item.productName,240), category:ITEM_CATEGORY_OPTIONS.includes(item.category) ? item.category : '', purchaseDate:limit(receipt.paidDate,20), vendor:limit(receipt.vendor?.value ?? receipt.vendor,240), ocrTextRelevantExcerpt:limit(item.ocrTextRelevantExcerpt || '',6000), childLabel:limit(childLabel,240), existingContext:limit(item.notes || '',1000) }; }
+function knowledgeCandidates(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 5).map((entry) => ({
+    key: limit(entry?.key, 80),
+    category: ITEM_CATEGORY_OPTIONS.includes(entry?.category) ? entry.category : '',
+    purposeFacts: Array.isArray(entry?.purposeFacts) ? entry.purposeFacts.map((fact) => limit(fact, 240)).filter(Boolean).slice(0, 12) : [],
+    authorityFacts: Array.isArray(entry?.authorityFacts) ? entry.authorityFacts.map((fact) => limit(fact, 240)).filter(Boolean).slice(0, 8) : [],
+    separationFacts: Array.isArray(entry?.separationFacts) ? entry.separationFacts.map((fact) => limit(fact, 240)).filter(Boolean).slice(0, 8) : [],
+    source: limit(entry?.source, 80),
+    matchedAlias: limit(entry?.matchedAlias, 240),
+  })).filter((entry) => entry.key && entry.category && entry.purposeFacts.length && entry.source === 'user_confirmed_document');
+}
 
-export async function suggestAiItem(item, receipt, childLabel, { accessToken, workerUrl = getAiWorkerUrl(), fetchImpl = fetch } = {}) { const context = toAiItemContext(item,receipt,childLabel); if (!workerUrl || !accessToken) throw new AiSuggestionError('AI_CONFIGURATION_ERROR'); let response; try { response = await fetchImpl(workerUrl.replace(/\/$/, '') + '/suggest-item', { method:'POST',headers:{Authorization:'Bearer ' + accessToken,'content-type':'application/json'},body:JSON.stringify(context) }); } catch { throw new AiSuggestionError('AI_NETWORK_ERROR'); } let body; try { body = await response.json(); } catch { throw new AiSuggestionError('AI_INVALID_RESPONSE'); } if (!response.ok) throw new AiSuggestionError(body?.error?.code || 'AI_UNAVAILABLE'); const categorySuggestion = body?.categorySuggestion; if (!ITEM_CATEGORY_OPTIONS.includes(categorySuggestion?.value)) throw new AiSuggestionError('AI_INVALID_RESPONSE'); const proposals = Array.isArray(body?.purposeSuggestions) ? body.purposeSuggestions : []; const byStyle = new Map(proposals.map((proposal) => [proposal?.style,proposal])); const basis = ['AI\u63d0\u6848', ...(context.productName ? ['productName: ' + context.productName] : []), ...(context.category ? ['category: ' + context.category] : []), ...(context.purchaseDate ? ['purchaseDate: ' + context.purchaseDate] : []), ...(context.vendor ? ['vendor: ' + context.vendor] : []), ...(context.childLabel ? ['childLabel: ' + context.childLabel] : []), ...(context.existingContext ? ['userContext: \u5165\u529b\u6e08\u307f\u88dc\u8db3\u4e8b\u5b9f'] : [])]; const purposeSuggestions = styles.map((style) => { const proposal = byStyle.get(style); if (!proposal || typeof proposal.value !== 'string' || !proposal.value.trim() || proposal.value.length > 480) throw new AiSuggestionError('AI_INVALID_RESPONSE'); return { style, value:proposal.value.trim(), confidence:confidence(proposal.confidence), source:'ai', basis }; }); return { purposeSuggestions, categorySuggestion:{ value:categorySuggestion.value, confidence:confidence(categorySuggestion.confidence), reason:text(categorySuggestion.reason).slice(0,240), source:'ai', basis }, missingFields:Array.isArray(body?.missingFields) ? body.missingFields : [], needsReview:Boolean(body?.needsReview) }; }
+export function toAiItemContext(item = {}, receipt = {}, childLabel = '') {
+  return {
+    productName: limit(item.productName, 240),
+    category: ITEM_CATEGORY_OPTIONS.includes(item.category) ? item.category : '',
+    purchaseDate: limit(receipt.paidDate, 20),
+    vendor: limit(receipt.vendor?.value ?? receipt.vendor, 240),
+    ocrTextRelevantExcerpt: limit(item.ocrTextRelevantExcerpt || '', 6000),
+    childLabel: limit(childLabel, 240),
+    existingContext: limit(item.notes || '', 1000),
+    knowledgeCandidates: knowledgeCandidates(item.knowledgeCandidates),
+  };
+}
+
+export async function suggestAiItem(item, receipt, childLabel, { accessToken, workerUrl = getAiWorkerUrl(), fetchImpl = fetch } = {}) {
+  const context = toAiItemContext(item, receipt, childLabel);
+  if (!workerUrl || !accessToken) throw new AiSuggestionError('AI_CONFIGURATION_ERROR');
+  let response;
+  try {
+    response = await fetchImpl(workerUrl.replace(/\/$/, '') + '/suggest-item', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'content-type': 'application/json' },
+      body: JSON.stringify(context),
+    });
+  } catch {
+    throw new AiSuggestionError('AI_NETWORK_ERROR');
+  }
+  let body;
+  try { body = await response.json(); } catch { throw new AiSuggestionError('AI_INVALID_RESPONSE'); }
+  if (!response.ok) throw new AiSuggestionError(body?.error?.code || 'AI_UNAVAILABLE');
+  const categorySuggestion = body?.categorySuggestion;
+  if (!ITEM_CATEGORY_OPTIONS.includes(categorySuggestion?.value)) throw new AiSuggestionError('AI_INVALID_RESPONSE');
+  const proposals = Array.isArray(body?.purposeSuggestions) ? body.purposeSuggestions : [];
+  const byStyle = new Map(proposals.map((proposal) => [proposal?.style, proposal]));
+  const knowledgeKey = typeof body?.knowledgeKey === 'string' ? body.knowledgeKey : null;
+  const basis = knowledgeKey
+    ? ['\u767b\u9332\u6e08\u307fKnowledge', 'knowledgeKey: ' + knowledgeKey]
+    : ['AI\u63d0\u6848', ...(context.productName ? ['productName: ' + context.productName] : []), ...(context.category ? ['category: ' + context.category] : []), ...(context.purchaseDate ? ['purchaseDate: ' + context.purchaseDate] : []), ...(context.vendor ? ['vendor: ' + context.vendor] : []), ...(context.childLabel ? ['childLabel: ' + context.childLabel] : []), ...(context.existingContext ? ['userContext: \u5165\u529b\u6e08\u307f\u88dc\u8db3\u4e8b\u5b9f'] : [])];
+  const purposeSuggestions = styles.map((style) => {
+    const proposal = byStyle.get(style);
+    if (!proposal || typeof proposal.value !== 'string' || !proposal.value.trim() || proposal.value.length > 480) throw new AiSuggestionError('AI_INVALID_RESPONSE');
+    return { style, value: proposal.value.trim(), confidence: confidence(proposal.confidence), source: 'ai', basis, knowledgeKey };
+  });
+  return {
+    purposeSuggestions,
+    categorySuggestion: { value: categorySuggestion.value, confidence: confidence(categorySuggestion.confidence), reason: text(categorySuggestion.reason).slice(0, 240), source: 'ai', basis, knowledgeKey },
+    knowledgeKey,
+    missingFields: Array.isArray(body?.missingFields) ? body.missingFields : [],
+    needsReview: Boolean(body?.needsReview),
+  };
+}

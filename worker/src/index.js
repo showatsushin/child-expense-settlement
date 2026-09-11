@@ -49,11 +49,49 @@ export function validateInput(value) {
   };
 }
 
+function textList(value, field, maxItems, maxLength) {
+  if (!Array.isArray(value)) throw new HttpError(400, 'MALFORMED_REQUEST', field + ' must be an array');
+  return value.slice(0, maxItems).map((item, index) => asText(item, field + '.' + index, maxLength)).filter(Boolean);
+}
+
+function validateKnowledgeCandidates(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new HttpError(400, 'MALFORMED_REQUEST', 'knowledgeCandidates must be an array');
+  return value.slice(0, 5).map((candidate, index) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) throw new HttpError(400, 'MALFORMED_REQUEST', 'knowledgeCandidates.' + index + ' must be an object');
+    const key = asText(candidate.key, 'knowledgeCandidates.' + index + '.key', 80);
+    const category = asText(candidate.category, 'knowledgeCandidates.' + index + '.category', 80);
+    if (!key || !ITEM_CATEGORIES.includes(category)) throw new HttpError(400, 'INVALID_KNOWLEDGE_CANDIDATE', 'knowledge candidate is invalid');
+    const purposeFacts = textList(candidate.purposeFacts, 'knowledgeCandidates.' + index + '.purposeFacts', 12, MAX_SHORT_TEXT);
+    if (!purposeFacts.length) throw new HttpError(400, 'INVALID_KNOWLEDGE_CANDIDATE', 'knowledge candidate needs purpose facts');
+    const source = asText(candidate.source, 'knowledgeCandidates.' + index + '.source', 80);
+    if (source !== 'user_confirmed_document') throw new HttpError(400, 'INVALID_KNOWLEDGE_CANDIDATE', 'knowledge source is invalid');
+    return {
+      key,
+      category,
+      purposeFacts,
+      authorityFacts: textList(candidate.authorityFacts || [], 'knowledgeCandidates.' + index + '.authorityFacts', 8, MAX_SHORT_TEXT),
+      separationFacts: textList(candidate.separationFacts || [], 'knowledgeCandidates.' + index + '.separationFacts', 8, MAX_SHORT_TEXT),
+      source,
+      matchedAlias: asText(candidate.matchedAlias, 'knowledgeCandidates.' + index + '.matchedAlias', MAX_SHORT_TEXT),
+    };
+  });
+}
+
 export function validateItemInput(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'MALFORMED_REQUEST', 'Request must be an object');
   const category = asText(value.category, 'category', 80);
   if (category && !ITEM_CATEGORIES.includes(category)) throw new HttpError(400, 'INVALID_ITEM_CATEGORY', 'category must be an existing item category');
-  return { productName: asText(value.productName, 'productName', MAX_SHORT_TEXT), category, purchaseDate: asText(value.purchaseDate, 'purchaseDate', 20), vendor: asText(value.vendor, 'vendor', MAX_SHORT_TEXT), ocrTextRelevantExcerpt: asText(value.ocrTextRelevantExcerpt, 'ocrTextRelevantExcerpt', MAX_OCR_TEXT), childLabel: asText(value.childLabel, 'childLabel', MAX_SHORT_TEXT), existingContext: asText(value.existingContext, 'existingContext', 1000) };
+  return {
+    productName: asText(value.productName, 'productName', MAX_SHORT_TEXT),
+    category,
+    purchaseDate: asText(value.purchaseDate, 'purchaseDate', 20),
+    vendor: asText(value.vendor, 'vendor', MAX_SHORT_TEXT),
+    ocrTextRelevantExcerpt: asText(value.ocrTextRelevantExcerpt, 'ocrTextRelevantExcerpt', MAX_OCR_TEXT),
+    childLabel: asText(value.childLabel, 'childLabel', MAX_SHORT_TEXT),
+    existingContext: asText(value.existingContext, 'existingContext', 1000),
+    knowledgeCandidates: validateKnowledgeCandidates(value.knowledgeCandidates),
+  };
 }
 
 async function projectKeySet(env) {
@@ -112,8 +150,35 @@ normalizeItemAiResponse = (result) => {
   return { categorySuggestion: { value: categoryValid ? category.value : '???', confidence: categoryValid ? confidence(category.confidence) : 0, reason: categoryValid ? safeText(category.reason, 'item category reason', MAX_SHORT_TEXT) : '?????????????' }, purposeSuggestions, missingFields: [], needsReview: true, knowledgeKey: typeof raw.knowledgeKey === 'string' ? raw.knowledgeKey.slice(0, 80) : null };
 };
 function aiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ALLOWED_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, reasonSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' } }, required: ['categorySuggestion', 'reasonSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
-function itemAiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ITEM_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, purposeSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' } }, required: ['categorySuggestion', 'purposeSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
-function itemAiMessages(input) { return [{ role: 'system', content: '\u5546\u54c1\u5358\u4f4d\u306e\u7a2e\u5225\u3068\u8cfc\u5165\u76ee\u7684\u306e\u5019\u88dc\u3092\u4f5c\u6210\u3059\u308b\u88dc\u52a9\u3067\u3059\u3002\u5165\u529b\u306b\u306a\u3044\u4e8b\u5b9f\u3001\u6cd5\u7684\u5224\u65ad\u3001\u533b\u7642\u8005\u7b49\u306e\u6307\u793a\u3092\u5275\u4f5c\u305b\u305a\u3001\u4eba\u306e\u78ba\u8a8d\u3092\u5fc5\u8981\u3068\u3059\u308b\u5019\u88dc\u3060\u3051\u3092JSON schema\u306b\u5f93\u3063\u3066\u8fd4\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u539f\u672c\u753b\u50cf\u3084PDF\u306f\u9001\u4fe1\u3055\u308c\u307e\u305b\u3093\u3002' }, { role: 'user', content: JSON.stringify(input) }]; }
+function factsSentence(facts) {
+  const selected = [];
+  for (const fact of facts) {
+    const next = [...selected, fact].join('?');
+    if (next.length + 1 > MAX_REASON_LENGTH) break;
+    selected.push(fact);
+  }
+  return selected.join('?') + '?';
+}
+
+function knowledgeItemSuggestion(input) {
+  const knowledge = input.knowledgeCandidates[0];
+  const detailedFacts = [...knowledge.purposeFacts, ...knowledge.authorityFacts, ...knowledge.separationFacts];
+  return {
+    categorySuggestion: { value: knowledge.category, confidence: 1, reason: 'Registered Knowledge: ' + knowledge.key },
+    purposeSuggestions: [
+      { style: 'concise', value: factsSentence(knowledge.purposeFacts.slice(0, 1)), confidence: 1 },
+      { style: 'standard', value: factsSentence(knowledge.purposeFacts), confidence: 1 },
+      { style: 'detailed', value: factsSentence(detailedFacts), confidence: 1 },
+    ],
+    missingFields: [],
+    needsReview: true,
+    knowledgeKey: knowledge.key,
+    basis: 'registered_knowledge',
+  };
+}
+
+function itemAiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ITEM_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, purposeSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' }, knowledgeKey: { type: 'string' } }, required: ['categorySuggestion', 'purposeSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
+function itemAiMessages(input) { return [{ role: 'system', content: 'Create review-only item category and purpose suggestions. When knowledgeCandidates is non-empty, registered knowledge is higher priority than every other input and general inference. Use only its documented facts, category, and key; do not add facts. The category must equal the selected knowledge category, knowledgeKey must equal its key, and needsReview must be true. When no Knowledge matches, mark general inference as needsReview. Never invent medical instructions, permissions, conditions, legal conclusions, or submission decisions. Return only JSON matching the schema.' }, { role: 'user', content: JSON.stringify(input) }]; }
 
 function aiMessages(input) { return [{ role: 'system', content: 'あなたは子ども関連支出の資料整理補助です。法的判断、相手の支払義務、養育費として認められること、裁判所で認められること、負担割合の決定をしてはいけません。入力された事実だけを使い、存在しない事実を追加しないでください。日本語で簡潔に回答し、指定JSON schema以外を返さないでください。支出理由は第三者が読んで事実関係を理解できる下書きにしてください。' }, { role: 'user', content: JSON.stringify(input) }]; }
 function withTimeout(promise) { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new HttpError(504, 'AI_TIMEOUT', 'AI request timed out')), AI_TIMEOUT_MS); })]).finally(() => clearTimeout(timer)); }
@@ -155,9 +220,19 @@ export async function handleRequest(request, env, dependencies = {}) {
     const bodyText = await request.text(); if (byteLength(bodyText) > MAX_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
     let body; try { body = JSON.parse(bodyText); } catch { throw new HttpError(400, 'MALFORMED_REQUEST', 'Request JSON is invalid'); }
     const input = itemRequest ? validateItemInput(body) : validateInput(body); stage = 'auth'; const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
-    const run = dependencies.runAi || ((model, options) => env.AI.run(model, options)); stage = 'ai_call';
-    const raw = await withTimeout(run(MODEL_ID, { messages: itemRequest ? itemAiMessages(input) : aiMessages(input), max_tokens: 320, temperature: 0.2, response_format: { type: 'json_schema', json_schema: itemRequest ? itemAiSchema() : aiSchema() } }));
-    stage = 'ai_response_received'; const normalized = itemRequest ? normalizeItemAiResponse(raw) : normalizeAiResponse(raw); stage = 'response_mapping'; logResult({ requestId, route, provider, model, status: 200, startedAt, diagnostic: { stage, errorClass: 'None', errorCode: 'NONE', upstreamStatus: null, schemaField: null, responseKeys: [], timeout: false } }); return response(normalized, 200, origin);
+    let normalized;
+    if (itemRequest && input.knowledgeCandidates.length) {
+      stage = 'response_mapping';
+      normalized = knowledgeItemSuggestion(input);
+    } else {
+      const run = dependencies.runAi || ((model, options) => env.AI.run(model, options));
+      stage = 'ai_call';
+      const raw = await withTimeout(run(MODEL_ID, { messages: itemRequest ? itemAiMessages(input) : aiMessages(input), max_tokens: 320, temperature: 0.2, response_format: { type: 'json_schema', json_schema: itemRequest ? itemAiSchema() : aiSchema() } }));
+      stage = 'ai_response_received';
+      normalized = itemRequest ? normalizeItemAiResponse(raw) : normalizeAiResponse(raw);
+      stage = 'response_mapping';
+    }
+    logResult({ requestId, route, provider, model, status: 200, startedAt, diagnostic: { stage, errorClass: 'None', errorCode: 'NONE', upstreamStatus: null, schemaField: null, responseKeys: [], timeout: false } }); return response(normalized, 200, origin);
   } catch (error) { const status = error instanceof HttpError ? error.status : 500; const diagnostic = { ...diagnosticFor(error, stage), requestId }; logResult({ requestId, route, provider, model, status, startedAt, diagnostic }); return errorResponse(error, origin, diagnostic); }
 }
 

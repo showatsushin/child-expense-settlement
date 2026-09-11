@@ -1,6 +1,7 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
-import { suggestAiItem, suggestItemPurposes } from './src/services/itemSuggestion.js';
+import { suggestItemPurposes } from './src/services/itemSuggestion.js';
+import { suggestItemWithKnowledge } from './src/services/knowledgeItemSuggestion.js';
 import { getAccessToken } from './src/auth-gate.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -53,7 +54,7 @@ async function handleAction(button) {
   if (action === 'delete') { items = items.filter((candidate) => candidate.id !== item.id); render(); return; }
   const proposalHost = card.querySelector('.item-proposals');
   if (action === 'local') { showProposals(proposalHost, suggestItemPurposes(item), item.id); return; }
-  if (action === 'ai') { button.disabled = true; proposalHost.textContent = 'AI\u304c\u8cfc\u5165\u54c1\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059\u2026'; try { const result = await suggestAiItem({ ...item, ocrTextRelevantExcerpt: $('#corrected')?.value || $('#raw')?.value || '' }, receipt(), childLabel(), { accessToken: await getAccessToken() }); showProposals(proposalHost, result.purposeSuggestions, item.id, result.categorySuggestion); } catch { proposalHost.textContent = 'AI\u63d0\u6848\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30ed\u30fc\u30ab\u30eb\u5019\u88dc\u306f\u5f15\u304d\u7d9a\u304d\u5229\u7528\u3067\u304d\u307e\u3059\u3002'; } finally { button.disabled = false; } }
+  if (action === 'ai') { button.disabled = true; proposalHost.textContent = 'AI\u304c\u8cfc\u5165\u54c1\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059\u2026'; try { const result = await suggestItemWithKnowledge({ ...item, ocrTextRelevantExcerpt: $('#corrected')?.value || $('#raw')?.value || '' }, receipt(), childLabel(), { accessToken: await getAccessToken() }); showProposals(proposalHost, result.purposeSuggestions, item.id, result.categorySuggestion); } catch { proposalHost.textContent = 'AI\u63d0\u6848\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30ed\u30fc\u30ab\u30eb\u5019\u88dc\u306f\u5f15\u304d\u7d9a\u304d\u5229\u7528\u3067\u304d\u307e\u3059\u3002'; } finally { button.disabled = false; } }
 }
 function applyReceiptReaderCandidates(reader) {
   const result = reader && typeof reader === 'object' ? reader : {}; const provider = result.provider === 'openai' ? 'openai' : 'tesseract';

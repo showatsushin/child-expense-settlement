@@ -24,7 +24,7 @@ export const PURCHASE_PURPOSE_KNOWLEDGE = Object.freeze([
     source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
   },
   {
-    key: 'medication_aid', category: '服薬補助用品', aliases: ['服薬ゼリー', 'お薬ゼリー', '服薬補助ゼリー'],
+    key: 'medication_aid', category: '服薬補助用品', aliases: ['服薬ゼリー', '服薬用ゼリー', 'お薬ゼリー', '服薬補助ゼリー'],
     purposeFacts: ['服薬負担軽減', '確実な服薬', '苦みの軽減'], authorityFacts: [], separationFacts: [], notes: [],
     source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
   },

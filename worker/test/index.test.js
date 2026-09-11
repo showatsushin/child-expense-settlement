@@ -26,3 +26,18 @@ test('item endpoint returns only item category and purpose candidates', async ()
 test('item invalid AI response exposes only diagnostic stage and request id', async () => { const response = await handleRequest(new Request('https://x/suggest-item',{ method:'POST',headers:{Origin:env.ALLOWED_ORIGIN,Authorization:'Bearer valid-token','content-type':'application/json'},body:JSON.stringify({productName:'water'}) }),env,{...dependencies,runAi:async() => ({ response:'not json' })}); const body=await response.json(); assert.equal(response.status,502); assert.equal(body.error.code,'AI_INVALID_RESPONSE'); assert.equal(body.error.stage,'json_parse'); assert.match(body.error.requestId,/^[0-9a-f-]{36}$/); assert.equal('responseKeys' in body.error,false); });
 
 test('reader upstream failure exposes safe stage and request id', async () => { const response = await handleRequest(new Request('https://x/read-receipt',{ method:'POST',headers:{Origin:env.ALLOWED_ORIGIN,Authorization:'Bearer valid-token','content-type':'application/json'},body:JSON.stringify({mimeType:'image/jpeg',imageDataUrl:'data:image/jpeg;base64,AAAA'}) }),env,{...dependencies,readReceipt:async() => { const error=new Error('upstream'); error.code='OPENAI_REQUEST_FAILED'; error.diagnostic={stage:'openai_call',upstreamStatus:429}; throw error; }}); const body=await response.json(); assert.equal(response.status,502); assert.equal(body.error.code,'OPENAI_REQUEST_FAILED'); assert.equal(body.error.stage,'openai_call'); assert.match(body.error.requestId,/^[0-9a-f-]{36}$/); assert.equal('upstreamStatus' in body.error,false); });
+
+
+test('item Knowledge match overrides generic AI category and stays review-only', async () => {
+  let modelCalled = false;
+  const knowledgeCandidates = [{ key: 'drinking_water', category: ITEM_CATEGORIES[1], purposeFacts: ['documented purpose one', 'documented purpose two'], authorityFacts: [], separationFacts: [], source: 'user_confirmed_document', matchedAlias: 'water' }];
+  const response = await handleRequest(new Request('https://x/suggest-item', { method: 'POST', headers: { Origin: env.ALLOWED_ORIGIN, Authorization: 'Bearer valid-token', 'content-type': 'application/json' }, body: JSON.stringify({ productName: 'water', category: ITEM_CATEGORIES[ITEM_CATEGORIES.length - 1], knowledgeCandidates }) }), env, { ...dependencies, runAi: async () => { modelCalled = true; throw new Error('must not use generic AI for a Knowledge match'); } });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(modelCalled, false);
+  assert.equal(body.categorySuggestion.value, ITEM_CATEGORIES[1]);
+  assert.equal(body.knowledgeKey, 'drinking_water');
+  assert.equal(body.needsReview, true);
+  assert.deepEqual(body.purposeSuggestions.map((item) => item.style), ['concise', 'standard', 'detailed']);
+  assert.match(body.purposeSuggestions[1].value, /documented purpose one/);
+});
