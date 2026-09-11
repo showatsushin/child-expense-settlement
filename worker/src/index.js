@@ -2,6 +2,7 @@ import { createLocalJWKSet, jwtVerify } from 'jose';
 
 export const MODEL_ID = '@cf/meta/llama-3.1-8b-instruct-fast';
 export const ALLOWED_CATEGORIES = Object.freeze(['食費', '衣類', '医療費', '教育費', '学校費', '保育費', '習い事', '交通費', '通信費', '日用品', '住居関連', '行事費', '保険', 'その他']);
+export const ITEM_CATEGORIES = Object.freeze(['\u4ed8\u304d\u6dfb\u3044\u5bdd\u5177\u30ec\u30f3\u30bf\u30eb\u4ee3','\u98f2\u6599\u6c34','\u30ea\u30cf\u30d3\u30ea\u30fb\u6a5f\u80fd\u8a13\u7df4\u7528\u54c1','\u98df\u6599\u54c1','\u670d\u85ac\u88dc\u52a9\u7528\u54c1','\u5165\u6d74\u88dc\u52a9\u7528\u54c1','\u7642\u990a\u30fb\u4ecb\u52a9\u7528\u54c1','\u885b\u751f\u7528\u54c1','\u53ce\u7d0d\u7528\u54c1','\u305d\u306e\u4ed6']);
 export const MAX_BODY_BYTES = 24 * 1024;
 const MAX_OCR_TEXT = 8000;
 const MAX_SHORT_TEXT = 240;
@@ -43,6 +44,13 @@ export function validateInput(value) {
   };
 }
 
+export function validateItemInput(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'MALFORMED_REQUEST', 'Request must be an object');
+  const category = asText(value.category, 'category', 80);
+  if (category && !ITEM_CATEGORIES.includes(category)) throw new HttpError(400, 'INVALID_ITEM_CATEGORY', 'category must be an existing item category');
+  return { productName: asText(value.productName, 'productName', MAX_SHORT_TEXT), category, purchaseDate: asText(value.purchaseDate, 'purchaseDate', 20), vendor: asText(value.vendor, 'vendor', MAX_SHORT_TEXT), ocrTextRelevantExcerpt: asText(value.ocrTextRelevantExcerpt, 'ocrTextRelevantExcerpt', MAX_OCR_TEXT), childLabel: asText(value.childLabel, 'childLabel', MAX_SHORT_TEXT), existingContext: asText(value.existingContext, 'existingContext', 1000) };
+}
+
 async function projectKeySet(env) {
   const base = String(env.SUPABASE_URL || '').replace(/\/$/, ''); if (!base) throw new HttpError(500, 'AUTH_CONFIGURATION_ERROR', 'Authentication verification is not configured');
   if (jwksCache.keySet && jwksCache.until > Date.now()) return jwksCache.keySet;
@@ -77,24 +85,38 @@ export function normalizeAiResponse(result) {
   const missingFields = Array.isArray(raw.missingFields) ? [...new Set(raw.missingFields.filter((field) => ['ocrText', 'correctedText', 'paidDate', 'vendor', 'amount', 'category', 'childLabel'].includes(field)))].slice(0, 7) : [];
   return { categorySuggestion, reasonSuggestions, missingFields, needsReview: Boolean(raw.needsReview) || !categoryValid };
 }
+export function normalizeItemAiResponse(result) {
+  const raw = extractAiPayload(result); const categoryInput = raw.categorySuggestion || {}; const categoryValid = ITEM_CATEGORIES.includes(categoryInput.value);
+  const categorySuggestion = { value: categoryValid ? categoryInput.value : '\u305d\u306e\u4ed6', confidence: categoryValid ? confidence(categoryInput.confidence) : 0, reason: categoryValid ? safeText(categoryInput.reason, 'item category reason', MAX_SHORT_TEXT) : '\u5546\u54c1\u7a2e\u5225\u306b\u4e00\u81f4\u3057\u306a\u3044\u305f\u3081\u8981\u78ba\u8a8d' };
+  const source = Array.isArray(raw.purposeSuggestions) ? raw.purposeSuggestions : raw.reasonSuggestions;
+  if (!Array.isArray(source)) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI purposes are invalid');
+  const styles = ['concise', 'standard', 'detailed']; const byStyle = new Map(source.map((item) => [item?.style, item]));
+  const purposeSuggestions = styles.map((style) => { const item = byStyle.get(style); if (!item) throw new HttpError(502, 'AI_INVALID_RESPONSE', 'AI purposes are incomplete'); return { style, value: safeText(item.value, 'purpose ' + style, MAX_REASON_LENGTH), confidence: confidence(item.confidence) }; });
+  const missingFields = Array.isArray(raw.missingFields) ? [...new Set(raw.missingFields.filter((field) => ['productName', 'category', 'purchaseDate', 'vendor', 'ocrTextRelevantExcerpt', 'childLabel', 'existingContext'].includes(field)))].slice(0, 7) : [];
+  return { categorySuggestion, purposeSuggestions, missingFields, needsReview: Boolean(raw.needsReview) || !categoryValid };
+}
+
 function aiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ALLOWED_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, reasonSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' } }, required: ['categorySuggestion', 'reasonSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
+function itemAiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ITEM_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, purposeSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' } }, required: ['categorySuggestion', 'purposeSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
+function itemAiMessages(input) { return [{ role: 'system', content: '\u5546\u54c1\u5358\u4f4d\u306e\u7a2e\u5225\u3068\u8cfc\u5165\u76ee\u7684\u306e\u5019\u88dc\u3092\u4f5c\u6210\u3059\u308b\u88dc\u52a9\u3067\u3059\u3002\u5165\u529b\u306b\u306a\u3044\u4e8b\u5b9f\u3001\u6cd5\u7684\u5224\u65ad\u3001\u533b\u7642\u8005\u7b49\u306e\u6307\u793a\u3092\u5275\u4f5c\u305b\u305a\u3001\u4eba\u306e\u78ba\u8a8d\u3092\u5fc5\u8981\u3068\u3059\u308b\u5019\u88dc\u3060\u3051\u3092JSON schema\u306b\u5f93\u3063\u3066\u8fd4\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u539f\u672c\u753b\u50cf\u3084PDF\u306f\u9001\u4fe1\u3055\u308c\u307e\u305b\u3093\u3002' }, { role: 'user', content: JSON.stringify(input) }]; }
+
 function aiMessages(input) { return [{ role: 'system', content: 'あなたは子ども関連支出の資料整理補助です。法的判断、相手の支払義務、養育費として認められること、裁判所で認められること、負担割合の決定をしてはいけません。入力された事実だけを使い、存在しない事実を追加しないでください。日本語で簡潔に回答し、指定JSON schema以外を返さないでください。支出理由は第三者が読んで事実関係を理解できる下書きにしてください。' }, { role: 'user', content: JSON.stringify(input) }]; }
 function withTimeout(promise) { let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new HttpError(504, 'AI_TIMEOUT', 'AI request timed out')), AI_TIMEOUT_MS); })]).finally(() => clearTimeout(timer)); }
 
 export async function handleRequest(request, env, dependencies = {}) {
   const requestId = crypto.randomUUID(); const startedAt = Date.now(); let origin = '';
   try {
-    origin = allowedOrigin(request, env); const url = new URL(request.url);
-    if (url.pathname !== '/suggest-expense') throw new HttpError(404, 'NOT_FOUND', 'Not found');
+    origin = allowedOrigin(request, env); const url = new URL(request.url); const itemRequest = url.pathname === '/suggest-item';
+    if (!itemRequest && url.pathname !== '/suggest-expense') throw new HttpError(404, 'NOT_FOUND', 'Not found');
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
     if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
     const contentLength = Number(request.headers.get('content-length') || 0); if (contentLength > MAX_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
     const bodyText = await request.text(); if (byteLength(bodyText) > MAX_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
     let body; try { body = JSON.parse(bodyText); } catch { throw new HttpError(400, 'MALFORMED_REQUEST', 'Request JSON is invalid'); }
-    const input = validateInput(body); const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
+    const input = itemRequest ? validateItemInput(body) : validateInput(body); const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
     const run = dependencies.runAi || ((model, options) => env.AI.run(model, options));
-    const raw = await withTimeout(run(MODEL_ID, { messages: aiMessages(input), max_tokens: 320, temperature: 0.2, response_format: { type: 'json_schema', json_schema: aiSchema() } }));
-    const normalized = normalizeAiResponse(raw); logResult({ requestId, status: 200, startedAt }); return response(normalized, 200, origin);
+    const raw = await withTimeout(run(MODEL_ID, { messages: itemRequest ? itemAiMessages(input) : aiMessages(input), max_tokens: 320, temperature: 0.2, response_format: { type: 'json_schema', json_schema: itemRequest ? itemAiSchema() : aiSchema() } }));
+    const normalized = itemRequest ? normalizeItemAiResponse(raw) : normalizeAiResponse(raw); logResult({ requestId, status: 200, startedAt }); return response(normalized, 200, origin);
   } catch (error) { const status = error instanceof HttpError ? error.status : 500; logResult({ requestId, status, startedAt, error: error?.name || 'Error' }); return errorResponse(error, origin); }
 }
 

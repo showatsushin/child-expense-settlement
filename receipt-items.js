@@ -7,6 +7,7 @@ const $ = (selector) => document.querySelector(selector);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const yen = (value) => `\u00a5${Number(value || 0).toLocaleString('ja-JP')}`;
 let items = [];
+let cachedOcrCandidates = [];
 let host;
 
 function totals() {
@@ -28,28 +29,34 @@ function render() {
 function update(id, field, value) {
   const item = items.find((candidate) => candidate.id === id); if (!item) return;
   if (['quantity','unitPrice','amount'].includes(field)) value = Number.isFinite(Number(value)) ? Number(value) : 0;
-  if (field === 'purpose') { item.purpose = { value, source: 'manual', confidence: null }; item.source = 'manual'; } else item[field] = value;
+  if (field === 'purpose') item.purpose = { value, source: 'manual', confidence: null }; else item[field] = value;
+  item.source = 'manual'; item.confidence = null;
   render();
 }
-function showProposals(container, proposals, id) {
-  container._proposals = proposals;
-  container.innerHTML = proposals.map((proposal, index) => `<article><strong>${esc(proposal.style)}</strong><p>${esc(proposal.value)}</p><small>\u6839\u62e0: ${esc((proposal.basis || []).join(' / '))}</small><button type="button" class="secondary" data-proposal="${index}" data-item="${esc(id)}">\u3053\u306e\u6587\u7ae0\u3092\u4f7f\u7528</button></article>`).join('');
+function candidateKey(item) { return String((item.basis || [])[0] || item.productName + ':' + item.amount); }
+function cacheCandidates(text) { cachedOcrCandidates = extractReceiptItemCandidates(text || ''); return cachedOcrCandidates; }
+function appendCachedCandidates() { const known = new Set(items.map(candidateKey)); const additions = cachedOcrCandidates.filter((item) => !known.has(candidateKey(item))); items.push(...additions.map((item, index) => createReceiptItem({ ...item, lineOrder: items.length + index + 1 }))); render(); return additions.length; }
+function applyOcrCandidates(text) { const candidates = cacheCandidates(text); if (!items.length && candidates.length) { items = candidates.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })); render(); return { candidateCount: candidates.length, added: candidates.length, retained: false }; } render(); return { candidateCount: candidates.length, added: 0, retained: items.length > 0 }; }
+function showProposals(container, proposals, id, categorySuggestion = null) {
+  container._proposals = proposals; container._categorySuggestion = categorySuggestion;
+  const category = categorySuggestion ? `<article class="item-category-proposal"><strong>AI\u7a2e\u5225\u5019\u88dc</strong><p>${esc(categorySuggestion.value)}</p><small>\u6839\u62e0: ${esc(categorySuggestion.reason || '')} \u30fb \u78ba\u5ea6 ${Math.round((categorySuggestion.confidence || 0) * 100)}%</small><button type="button" class="secondary" data-category-proposal="${esc(id)}">\u7a2e\u5225\u306b\u63a1\u7528</button></article>` : '';
+  container.innerHTML = category + proposals.map((proposal, index) => `<article><strong>${esc(proposal.style)}</strong><p>${esc(proposal.value)}</p><small>\u6839\u62e0: ${esc((proposal.basis || []).join(' / '))}</small><button type="button" class="secondary" data-proposal="${index}" data-item="${esc(id)}">\u3053\u306e\u6587\u7ae0\u3092\u4f7f\u7528</button></article>`).join('');
 }
 async function handleAction(button) {
   const action = button.dataset.action;
   if (action === 'add') { items.push(createReceiptItem({ lineOrder: items.length + 1, submissionStatus: 'review' })); render(); return; }
-  if (action === 'ocr') { const candidates = extractReceiptItemCandidates($('#corrected')?.value || $('#raw')?.value || ''); items.push(...candidates.map((item, index) => createReceiptItem({ ...item, lineOrder: items.length + index + 1 }))); render(); return; }
+  if (action === 'ocr') { cacheCandidates($('#corrected')?.value || $('#raw')?.value || ''); appendCachedCandidates(); return; }
   const card = button.closest('[data-id]'); if (!card) return; const item = items.find((candidate) => candidate.id === card.dataset.id); if (!item) return;
   if (action === 'delete') { items = items.filter((candidate) => candidate.id !== item.id); render(); return; }
   const proposalHost = card.querySelector('.item-proposals');
   if (action === 'local') { showProposals(proposalHost, suggestItemPurposes(item), item.id); return; }
-  if (action === 'ai') { button.disabled = true; proposalHost.textContent = 'AI\u304c\u8cfc\u5165\u54c1\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059\u2026'; try { const result = await suggestAiItem({ ...item, ocrTextRelevantExcerpt: $('#corrected')?.value || $('#raw')?.value || '' }, receipt(), childLabel(), { accessToken: await getAccessToken() }); showProposals(proposalHost, result.purposeSuggestions, item.id); } catch { proposalHost.textContent = 'AI\u63d0\u6848\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30ed\u30fc\u30ab\u30eb\u5019\u88dc\u306f\u5f15\u304d\u7d9a\u304d\u5229\u7528\u3067\u304d\u307e\u3059\u3002'; } finally { button.disabled = false; } }
+  if (action === 'ai') { button.disabled = true; proposalHost.textContent = 'AI\u304c\u8cfc\u5165\u54c1\u3092\u6574\u7406\u3057\u3066\u3044\u307e\u3059\u2026'; try { const result = await suggestAiItem({ ...item, ocrTextRelevantExcerpt: $('#corrected')?.value || $('#raw')?.value || '' }, receipt(), childLabel(), { accessToken: await getAccessToken() }); showProposals(proposalHost, result.purposeSuggestions, item.id, result.categorySuggestion); } catch { proposalHost.textContent = 'AI\u63d0\u6848\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u30ed\u30fc\u30ab\u30eb\u5019\u88dc\u306f\u5f15\u304d\u7d9a\u304d\u5229\u7528\u3067\u304d\u307e\u3059\u3002'; } finally { button.disabled = false; } }
 }
 function install() {
   const form = $('#form'); if (!form) return; host = document.createElement('section'); host.id = 'receiptItems'; host.className = 'receipt-items full'; form.querySelector('.fields').append(host);
   host.addEventListener('input', (event) => { const card = event.target.closest('[data-id]'); if (card && event.target.dataset.field) update(card.dataset.id, event.target.dataset.field, event.target.value); });
   host.addEventListener('change', (event) => { const card = event.target.closest('[data-id]'); if (card && event.target.dataset.field) update(card.dataset.id, event.target.dataset.field, event.target.value); });
-  host.addEventListener('click', (event) => { const proposal = event.target.closest('[data-proposal]'); if (proposal) { const proposalHost = proposal.closest('.item-proposals'); const item = items.find((candidate) => candidate.id === proposal.dataset.item); const candidate = proposalHost._proposals?.[Number(proposal.dataset.proposal)]; if (item && candidate) { item.purpose = { value: candidate.value, source: candidate.source, confidence: candidate.confidence }; item.source = candidate.source; item.confidence = candidate.confidence; item.basis = candidate.basis || []; render(); } return; } const button = event.target.closest('[data-action]'); if (button) handleAction(button); });
-  form.amount?.addEventListener('input', render); window.receiptItemsController = { getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })), setItems: (value) => { items = (Array.isArray(value) ? value : []).map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })); render(); }, reset: () => { items = []; render(); } }; render();
+  host.addEventListener('click', (event) => { const categoryProposal = event.target.closest('[data-category-proposal]'); if (categoryProposal) { const proposalHost = categoryProposal.closest('.item-proposals'); const item = items.find((candidate) => candidate.id === categoryProposal.dataset.categoryProposal); const category = proposalHost._categorySuggestion; if (item && category) { item.category = category.value; item.source = 'ai'; item.confidence = category.confidence; item.basis = category.basis || []; render(); } return; } const proposal = event.target.closest('[data-proposal]'); if (proposal) { const proposalHost = proposal.closest('.item-proposals'); const item = items.find((candidate) => candidate.id === proposal.dataset.item); const candidate = proposalHost._proposals?.[Number(proposal.dataset.proposal)]; if (item && candidate) { item.purpose = { value: candidate.value, source: candidate.source, confidence: candidate.confidence }; item.source = candidate.source; item.confidence = candidate.confidence; item.basis = candidate.basis || []; render(); } return; } const button = event.target.closest('[data-action]'); if (button) handleAction(button); });
+  form.amount?.addEventListener('input', render); window.receiptItemsController = { getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })), setItems: (value) => { items = (Array.isArray(value) ? value : []).map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })); render(); }, applyOcrCandidates, reset: () => { items = []; cachedOcrCandidates = []; render(); } }; render();
 }
 install();

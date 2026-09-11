@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createExpenseRecord, createReceiptItem } from '../src/models.js';
 import { migratePhase1Data, SCHEMA_VERSION } from '../src/migrations.js';
@@ -6,7 +6,7 @@ import { calculateReceiptSummary, receiptDifference, receiptClaimTotal, receiptI
 import { extractReceiptItemCandidates } from '../src/receipt-item-ocr.js';
 import { buildEvidenceManifest, receiptEvidenceRows } from '../src/evidence-manifest.js';
 import { buildWorkbookData } from '../src/output-models.js';
-import { toAiItemContext } from '../src/services/itemSuggestion.js';
+import { suggestAiItem, toAiItemContext } from '../src/services/itemSuggestion.js';
 import { databaseNameForUser } from '../src/user-storage.js';
 
 const included = (data) => createReceiptItem({ submissionStatus:'included', ...data });
@@ -21,5 +21,7 @@ test('legacy ExpenseRecord migrates to one receipt item without changing evidenc
 test('OCR item candidates retain line order and never return invalid amount', () => { const items = extractReceiptItemCandidates('\u98f2\u6599\u6c34 400\n\u5408\u8a08 1480\n\u7528\u54c1 680'); assert.equal(items.length,2); assert.deepEqual(items.map((item) => item.lineOrder),[1,3]); assert.ok(items.every((item) => Number.isFinite(item.amount))); });
 test('evidence manifest supports multiple originals, PDF and missing original metadata', () => { const records = [createExpenseRecord({ id:'r', amount:100, evidenceIds:['b','a'], items:[included({ amount:100 })] })]; const entries = buildEvidenceManifest(records,[{ id:'b',evidenceNumber:'E-002',fileName:'b.pdf',mimeType:'application/pdf'},{ id:'a',evidenceNumber:'E-001',fileName:'a.jpg',mimeType:'image/jpeg'}]); assert.deepEqual(entries.map((entry) => entry.evidence.evidenceNumber),['E-001','E-002']); assert.equal(entries[0].receipts[0].id,'r'); assert.deepEqual(receiptEvidenceRows(records,entries.map((entry) => entry.evidence))[0].evidenceNumbers,['E-002','E-001']); });
 test('workbook contains receipt items, category totals, evidence list and summary', () => { const data = buildWorkbookData([createExpenseRecord({ amount:100, evidenceIds:['e'], items:[included({ productName:'x', amount:100, category:'\u98f2\u6599\u6c34' })] })],[{ id:'e',evidenceNumber:'E-001',fileName:'x.jpg',ocr:{} }],[]); assert.equal(data.receiptItems[0][0],'\u8a3c\u62e0\u756a\u53f7'); assert.equal(data.category[1][1],100); assert.equal(data.evidence[1][0],'E-001'); });
-test('item AI context contains selected-item text only and never sends originals or ledger', () => { const context = toAiItemContext({ productName:'DVD', category:'\u7642\u990a\u30fb\u4ecb\u52a9\u7528\u54c1', amount:100, ocrTextRelevantExcerpt:'DVD 100', notes:'\u5165\u529b\u6e08\u307f\u4e8b\u5b9f' },{ paidDate:'2026-01-01', vendor:'Shop' },'child'); const sent = JSON.stringify(context.workerContext); assert.match(sent,/DVD/); assert.ok(!/file|image|pdf|evidenceIds|ledger/i.test(sent)); });
+test('item AI context contains selected-item text only and never sends originals or ledger', () => { const context = toAiItemContext({ productName:'DVD', category:'\u7642\u990a\u30fb\u4ecb\u52a9\u7528\u54c1', amount:100, ocrTextRelevantExcerpt:'DVD 100', notes:'\u5165\u529b\u6e08\u307f\u4e8b\u5b9f' },{ paidDate:'2026-01-01', vendor:'Shop' },'child'); const sent = JSON.stringify(context); assert.match(sent,/DVD/); assert.ok(!/file|image|pdf|evidenceIds|ledger/i.test(sent)); });
 test('user-specific IndexedDB names cannot collide across users', () => { assert.notEqual(databaseNameForUser('user-a'),databaseNameForUser('user-b')); assert.match(databaseNameForUser('user-a'),/user-a$/); });
+
+test('item AI sends only selected item context and returns item category and purposes', async () => { let called; const response = { categorySuggestion:{ value:'\u98f2\u6599\u6c34',confidence:.8,reason:'product name'}, purposeSuggestions:['concise','standard','detailed'].map((style) => ({ style,value:'draft '+style,confidence:.7 })), missingFields:[],needsReview:false }; const result = await suggestAiItem({ productName:'water',category:'\u98f2\u6599\u6c34',ocrTextRelevantExcerpt:'water 120' },{ paidDate:'2026-01-01',vendor:'shop' },'child',{ accessToken:'token',workerUrl:'https://worker.example',fetchImpl:async(url,init) => { called={url,init}; return new Response(JSON.stringify(response),{status:200}); } }); assert.equal(called.url,'https://worker.example/suggest-item'); assert.deepEqual(Object.keys(JSON.parse(called.init.body)).sort(),['category','childLabel','existingContext','ocrTextRelevantExcerpt','productName','purchaseDate','vendor']); assert.equal(result.categorySuggestion.value,'\u98f2\u6599\u6c34'); assert.equal(result.purposeSuggestions.length,3); });
