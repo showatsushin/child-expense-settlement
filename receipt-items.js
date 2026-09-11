@@ -71,3 +71,41 @@ function install() {
   form.amount?.addEventListener('input', render); window.receiptItemsController = { getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })), setItems: (value) => { items = (Array.isArray(value) ? value : []).map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })); render(); }, applyOcrCandidates, applyReceiptReaderCandidates, reset: () => { items = []; cachedOcrCandidates = []; ocrQuality = null; render(); } }; render();
 }
 install();
+if (typeof document !== 'undefined') {
+
+// Product flow: one AI action backed by the canonical Knowledge.  Capturing
+// the click prevents the legacy generic proposal path from running.
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-action="ai"]');
+  if (!button || !button.closest('#receiptItems')) return;
+  event.preventDefault(); event.stopImmediatePropagation();
+  const card = button.closest('[data-id]'); const item = items.find((candidate) => candidate.id === card?.dataset.id); const proposalHost = card?.querySelector('.item-proposals');
+  if (!item || !proposalHost) return;
+  button.disabled = true; proposalHost.textContent = 'AI?????Knowledge???????????????';
+  try {
+    const { suggestItemWithKnowledge } = await import('./src/services/knowledgeItemSuggestion.js');
+    const result = await suggestItemWithKnowledge({ ...item, ocrTextRelevantExcerpt: $('#corrected')?.value || $('#raw')?.value || '' }, receipt(), childLabel(), { accessToken: await getAccessToken() });
+    showProposals(proposalHost, result.purposeSuggestions, item.id, result.categorySuggestion);
+    proposalHost.insertAdjacentHTML('afterbegin', `<p class="item-knowledge-basis">??: ${esc(result.basis.join(' / '))}${result.needsReview ? ' ? ???' : ''}</p>`);
+  } catch (error) { proposalHost.textContent = `AI??????????????${esc(error?.code || 'AI_UNAVAILABLE')}??????????????????`; }
+  finally { button.disabled = false; }
+}, true);
+
+const productFlowStyle = document.createElement('style');
+productFlowStyle.textContent = '.receipt-item-actions [data-action="local"]{display:none}.item-knowledge-basis{margin:8px 0;padding:7px;border-left:3px solid #17455d;background:#edf5f7}.receipt-item-actions [data-action="ai"]::after{content:"???????????"}.receipt-item-actions [data-action="ai"]{font-size:0}.receipt-item-actions [data-action="ai"]::after{font-size:14px}';
+document.head.append(productFlowStyle);
+
+function renderProductSummary() {
+  const summary = host?.querySelector('.receipt-item-summary'); if (!summary) return;
+  const receiptTotal = Number($('#form')?.amount?.value || 0); const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0); const claimTotal = items.filter((item) => item.submissionStatus === 'included').reduce((sum, item) => sum + (Number(item.amount) || 0), 0); const difference = receiptTotal - itemTotal;
+  const counts = ['included', 'excluded', 'review'].map((status) => items.filter((item) => item.submissionStatus === status).length);
+  const html = `<span>??? ${items.length}?</span><span>?????? ${yen(receiptTotal)}</span><span>?????? ${yen(itemTotal)}</span><span class="${difference ? 'difference-warning' : ''}">???? ${difference ? `?? ${yen(difference)}????` : '??'}</span><span>?????? ${counts[0]}?</span><span>??????? ${counts[1]}?</span><span>????? ${counts[2]}?</span><span>????? ${yen(claimTotal)}</span>`;
+  if (summary.innerHTML !== html) summary.innerHTML = html;
+  host.querySelectorAll('[data-field="submissionStatus"] option').forEach((option) => { option.textContent = ({ included: '????', excluded: '?????', review: '???' })[option.value] || option.value; });
+}
+if (host) {
+  new MutationObserver(renderProductSummary).observe(host, { childList: true, subtree: true });
+  document.querySelector('#form')?.amount?.addEventListener('input', renderProductSummary);
+  renderProductSummary();
+}
+}

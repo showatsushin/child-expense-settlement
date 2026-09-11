@@ -1,4 +1,4 @@
-export const OPENAI_RECEIPT_READER_MODEL = 'gpt-4.1-mini';
+﻿export const OPENAI_RECEIPT_READER_MODEL = 'gpt-4.1-mini';
 export const MAX_RECEIPT_READER_IMAGE_BYTES = 4 * 1024 * 1024;
 export const MAX_RECEIPT_READER_BODY_BYTES = 6 * 1024 * 1024;
 export const RECEIPT_IMAGE_MIME_TYPES = Object.freeze(['image/jpeg', 'image/png']);
@@ -37,6 +37,14 @@ export function receiptReaderSchema() {
   } };
 }
 
+
+export function receiptItemExtractionSchema() {
+  const nullableString = { type: ['string', 'null'] }; const nullableNumber = { type: ['number', 'null'] };
+  return { type: 'object', additionalProperties: false, required: ['items', 'warnings'], properties: {
+    items: { type: 'array', maxItems: 120, items: { type: 'object', additionalProperties: false, required: ['sourceText', 'productName', 'quantity', 'unitPrice', 'amount', 'confidence', 'needsReview'], properties: { sourceText: nullableString, productName: nullableString, quantity: nullableNumber, unitPrice: nullableNumber, amount: nullableNumber, confidence: nullableNumber, needsReview: { type: 'boolean' } } } },
+    warnings: { type: 'array', maxItems: 20, items: { type: 'string' } }
+  } };
+}
 export function validateReceiptReadInput(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Request must be an object');
   const mimeType = String(value.mimeType || '').toLowerCase();
@@ -80,6 +88,18 @@ export function normalizeOpenAiReceiptResponse(response) {
 
 function usage(response) { const inputTokens = Number(response?.usage?.input_tokens); const outputTokens = Number(response?.usage?.output_tokens); const totalTokens = Number(response?.usage?.total_tokens); return { inputTokens: Number.isFinite(inputTokens) ? inputTokens : null, outputTokens: Number.isFinite(outputTokens) ? outputTokens : null, totalTokens: Number.isFinite(totalTokens) ? totalTokens : null }; }
 
+export function normalizeOpenAiItemExtractionResponse(response) {
+  let parsed;
+  try { parsed = JSON.parse(outputText(response)); } catch (error) { if (error instanceof ReceiptReaderError) throw error; throw new ReceiptReaderError('OPENAI_STRUCTURED_OUTPUT_INVALID', 'structured_output_parse', { responseKeys: responseKeys(response) }); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.items) || !Array.isArray(parsed.warnings)) throw new ReceiptReaderError('OPENAI_SCHEMA_INVALID', 'schema_validation', { schemaField: 'items', responseKeys: responseKeys(parsed) });
+  return { items: parsed.items.slice(0, 120).map((item) => ({ sourceText: text(item?.sourceText, 'sourceText', 1000), productName: text(item?.productName, 'productName', 240), quantity: number(item?.quantity, 'quantity'), unitPrice: number(item?.unitPrice, 'unitPrice'), amount: number(item?.amount, 'amount'), confidence: confidence(item?.confidence), needsReview: Boolean(item?.needsReview) })), warnings: [...new Set(parsed.warnings.map((warning) => text(warning, 'warning', 240)).filter(Boolean))].slice(0, 20) };
+}
+
+export function shouldRunItemSecondPass(result = {}) {
+  const quality = result.quality || {};
+  return Boolean(result.receiptTotalAmount != null && (result.vendor || result.purchaseDate) && (quality.candidateCount === 0 || quality.status === 'low_confidence' || (quality.difference != null && Math.abs(quality.difference) > 1)));
+}
+
 export async function readReceiptWithOpenAi(input, env, { fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
   if (!env.OPENAI_API_KEY) throw new ReceiptReaderError('OPENAI_NOT_CONFIGURED', 'openai_call');
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -89,11 +109,17 @@ export async function readReceiptWithOpenAi(input, env, { fetchImpl = fetch, tim
     let body;
     try { body = await response.json(); }
     catch { throw new ReceiptReaderError('OPENAI_STRUCTURED_OUTPUT_INVALID', 'structured_output_parse'); }
-    try { return { ...normalizeOpenAiReceiptResponse(body), metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body) } }; }
-    catch (error) {
-      if (error instanceof ReceiptReaderError) throw error;
-      throw new ReceiptReaderError('OPENAI_RESPONSE_MAPPING_FAILED', 'response_mapping', { responseKeys: responseKeys(body) });
+    const primary = normalizeOpenAiReceiptResponse(body);
+    if (shouldRunItemSecondPass(primary)) {
+      try {
+        const second = await fetchImpl('https://api.openai.com/v1/responses', { method: 'POST', signal: controller.signal, headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, store: false, instructions: `${OPENAI_RECEIPT_READER_INSTRUCTIONS} Extract only visible purchase-item lines. Do not return header fields or any classification.`, input: [{ role: 'user', content: [{ type: 'input_text', text: 'Extract only the visible purchase items into the supplied schema.' }, { type: 'input_image', image_url: input.imageDataUrl, detail: 'high' }] }], text: { format: { type: 'json_schema', name: 'receipt_item_extraction_result', strict: true, schema: receiptItemExtractionSchema() } }, max_output_tokens: 1000 }) });
+        if (!second.ok) throw new ReceiptReaderError('OPENAI_REQUEST_FAILED', 'openai_call', { upstreamStatus: second.status });
+        const extracted = normalizeOpenAiItemExtractionResponse(await second.json());
+        if (extracted.items.length) { const warnings = [...new Set([...primary.warnings, ...extracted.warnings])]; const result = { ...primary, items: extracted.items, warnings, quality: evaluateReceiptReaderQuality({ ...primary, items: extracted.items, warnings }) }; return { ...result, metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body), secondPassUsed: true, secondPassFailed: false } }; }
+      } catch { return { ...primary, metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body), secondPassUsed: true, secondPassFailed: true } }; }
+      return { ...primary, metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body), secondPassUsed: true, secondPassFailed: false } };
     }
+    return { ...primary, metadata: { model: env.OPENAI_RECEIPT_READER_MODEL || OPENAI_RECEIPT_READER_MODEL, usage: usage(body), secondPassUsed: false, secondPassFailed: false } };
   } catch (cause) { if (cause?.name === 'AbortError') throw new ReceiptReaderError('OPENAI_TIMEOUT', 'openai_call', { timeout: true }); if (cause instanceof ReceiptReaderError) throw cause; throw new ReceiptReaderError('OPENAI_REQUEST_FAILED', 'openai_call'); }
   finally { clearTimeout(timer); }
 }
