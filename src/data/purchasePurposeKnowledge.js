@@ -6,8 +6,8 @@ export const PURCHASE_PURPOSE_KNOWLEDGE = Object.freeze([
   {
     key: 'drinking_water', category: '飲料水',
     aliases: ['飲料水', '水', 'ミネラルウォーター', 'いろはす', 'ペットボトル水'],
-    purposeFacts: ['本人用飲料水として購入', '問題行為で飲料水がなくなるため補充'],
-    authorityFacts: [], separationFacts: ['母親分は別購入・別管理'], notes: [],
+    purposeFacts: ["本人用の飲料水として購入","強度行動障害による問題行為により飲料水がなくなるため、補充として購入"],
+    authorityFacts: [], separationFacts: ["母親分は別購入・別管理"], notes: [],
     source: 'user_confirmed_document', version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION,
   },
   {

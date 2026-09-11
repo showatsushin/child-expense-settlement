@@ -41,3 +41,26 @@ test('item Knowledge match overrides generic AI category and stays review-only',
   assert.deepEqual(body.purposeSuggestions.map((item) => item.style), ['concise', 'standard', 'detailed']);
   assert.match(body.purposeSuggestions[1].value, /documented purpose one/);
 });
+
+
+test('Knowledge purpose styles preserve documented facts without question-mark endings', async () => {
+  const knowledgeCandidates = [{ key: 'drinking_water', category: ITEM_CATEGORIES[1], purposeFacts: ['\u672c\u4eba\u7528\u306e\u98f2\u6599\u6c34\u3068\u3057\u3066\u8cfc\u5165', '\u5f37\u5ea6\u884c\u52d5\u969c\u5bb3\u306b\u3088\u308b\u554f\u984c\u884c\u70ba\u306b\u3088\u308a\u98f2\u6599\u6c34\u304c\u306a\u304f\u306a\u308b\u305f\u3081\u3001\u88dc\u5145\u3068\u3057\u3066\u8cfc\u5165'], authorityFacts: [], separationFacts: ['\u6bcd\u89aa\u5206\u306f\u5225\u8cfc\u5165\u30fb\u5225\u7ba1\u7406'], source: 'user_confirmed_document', matchedAlias: '\u3044\u308d\u306f\u3059' }];
+  const response = await handleRequest(new Request('https://x/suggest-item', { method: 'POST', headers: { Origin: env.ALLOWED_ORIGIN, Authorization: 'Bearer valid-token', 'content-type': 'application/json' }, body: JSON.stringify({ productName: '\u3044\u308d\u306f\u3059\uff08555ml\uff09', knowledgeCandidates }) }), env, dependencies);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.purposeSuggestions[0].value, '\u672c\u4eba\u7528\u306e\u98f2\u6599\u6c34\u3068\u3057\u3066\u8cfc\u5165\u3002');
+  assert.equal(body.purposeSuggestions[1].value, '\u672c\u4eba\u7528\u306e\u98f2\u6599\u6c34\u3068\u3057\u3066\u8cfc\u5165\u3002\u5f37\u5ea6\u884c\u52d5\u969c\u5bb3\u306b\u3088\u308b\u554f\u984c\u884c\u70ba\u306b\u3088\u308a\u98f2\u6599\u6c34\u304c\u306a\u304f\u306a\u308b\u305f\u3081\u3001\u88dc\u5145\u3068\u3057\u3066\u8cfc\u5165\u3002');
+  assert.match(body.purposeSuggestions[2].value, /\u6bcd\u89aa\u5206\u306f\u5225\u8cfc\u5165\u30fb\u5225\u7ba1\u7406/);
+  assert.ok(body.purposeSuggestions.every((item) => !item.value.endsWith('?')));
+});
+
+
+test('rehabilitation Knowledge standard and detailed styles retain all documented training facts', async () => {
+  const purposeFacts = ['\u8133\u75c7\u5f8c\u306e\u30ea\u30cf\u30d3\u30ea', '\u6a5f\u80fd\u56de\u5fa9', '\u624b\u6307\u904b\u52d5', '\u5de7\u7deb\u6027', '\u6ce8\u610f\u30fb\u96c6\u4e2d', '\u773c\u3068\u624b\u306e\u5354\u50cd', '\u8996\u899a\u8a8d\u77e5\u3078\u306e\u523a\u6fc0'];
+  const knowledgeCandidates = [{ key: 'rehabilitation_training', category: ITEM_CATEGORIES[2], purposeFacts, authorityFacts: ['\u533b\u5e2b\u304b\u3089\u4f7f\u7528\u3059\u308b\u3088\u3046\u6307\u793a\u3042\u308a'], separationFacts: [], source: 'user_confirmed_document', matchedAlias: '\u30b7\u30fc\u30eb\u30d6\u30c3\u30af' }];
+  const response = await handleRequest(new Request('https://x/suggest-item', { method: 'POST', headers: { Origin: env.ALLOWED_ORIGIN, Authorization: 'Bearer valid-token', 'content-type': 'application/json' }, body: JSON.stringify({ productName: '\u30b7\u30fc\u30eb\u30d6\u30c3\u30af', knowledgeCandidates }) }), env, dependencies);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  for (const fact of purposeFacts) assert.match(body.purposeSuggestions[1].value, new RegExp(fact));
+  assert.match(body.purposeSuggestions[2].value, /\u533b\u5e2b\u304b\u3089\u4f7f\u7528\u3059\u308b\u3088\u3046\u6307\u793a\u3042\u308a/);
+});

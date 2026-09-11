@@ -45,3 +45,13 @@ test('Knowledge match is sent structurally and remains the displayed basis', asy
   assert.equal(result.needsReview, true);
   assert.match(result.categorySuggestion.reason, /Knowledge/);
 });
+
+
+test('drinking-water Knowledge keeps the documented behavior and separation facts', () => {
+  const [match] = knowledgeForAi('\u3044\u308d\u306f\u3059\uff08555ml\uff09');
+  assert.deepEqual(match.purposeFacts, [
+    '\u672c\u4eba\u7528\u306e\u98f2\u6599\u6c34\u3068\u3057\u3066\u8cfc\u5165',
+    '\u5f37\u5ea6\u884c\u52d5\u969c\u5bb3\u306b\u3088\u308b\u554f\u984c\u884c\u70ba\u306b\u3088\u308a\u98f2\u6599\u6c34\u304c\u306a\u304f\u306a\u308b\u305f\u3081\u3001\u88dc\u5145\u3068\u3057\u3066\u8cfc\u5165',
+  ]);
+  assert.deepEqual(match.separationFacts, ['\u6bcd\u89aa\u5206\u306f\u5225\u8cfc\u5165\u30fb\u5225\u7ba1\u7406']);
+});

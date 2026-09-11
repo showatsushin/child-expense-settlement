@@ -151,13 +151,17 @@ normalizeItemAiResponse = (result) => {
 };
 function aiSchema() { return { type: 'object', properties: { categorySuggestion: { type: 'object', properties: { value: { type: 'string', enum: ALLOWED_CATEGORIES }, confidence: { type: 'number' }, reason: { type: 'string' } }, required: ['value', 'confidence', 'reason'], additionalProperties: false }, reasonSuggestions: { type: 'array', minItems: 3, maxItems: 3, items: { type: 'object', properties: { style: { type: 'string', enum: ['concise', 'standard', 'detailed'] }, value: { type: 'string' }, confidence: { type: 'number' } }, required: ['style', 'value', 'confidence'], additionalProperties: false } }, missingFields: { type: 'array', items: { type: 'string' } }, needsReview: { type: 'boolean' } }, required: ['categorySuggestion', 'reasonSuggestions', 'missingFields', 'needsReview'], additionalProperties: false }; }
 function factsSentence(facts) {
+  const sentenceEnd = '\u3002';
   const selected = [];
   for (const fact of facts) {
-    const next = [...selected, fact].join('?');
-    if (next.length + 1 > MAX_REASON_LENGTH) break;
-    selected.push(fact);
+    const normalized = String(fact || '').trim().replace(/[\u3002.!?]+$/g, '');
+    if (!normalized) continue;
+    const next = [...selected, normalized].join(sentenceEnd);
+    if (next.length + sentenceEnd.length > MAX_REASON_LENGTH) break;
+    selected.push(normalized);
   }
-  return selected.join('?') + '?';
+  if (!selected.length) throw new HttpError(400, 'INVALID_KNOWLEDGE_CANDIDATE', 'knowledge candidate has no renderable facts');
+  return selected.join(sentenceEnd) + sentenceEnd;
 }
 
 function knowledgeItemSuggestion(input) {
