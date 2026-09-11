@@ -4,6 +4,7 @@ import { createEvidenceDocument, createExpenseRecord, CATEGORY_OPTIONS, SETTLEME
 import { calculateOtherBurdenAmount, calculateOutstandingAmount, calculateSummary, nextEvidenceNumber, toNonNegativeNumber } from './src/calculations.js';
 import { validateFile, renderPreview } from './src/file-preview.js';
 import { recognizeImage, extractPdfText } from './src/services/documentRecognition.js';
+import { readReceipt } from './src/services/receiptReaderProvider.js';
 import { extractSuggestions } from './src/ocr-extract.js';
 import { findPotentialDuplicates } from './src/duplicates.js';
 import { buildWorkbookData, buildWordDocumentModel } from './src/output-models.js';
@@ -40,6 +41,17 @@ async function ocr(){
   if(!file){$('#filemsg').textContent='\u5148\u306b\u539f\u672c\u30d5\u30a1\u30a4\u30eb\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044\u3002';return;}
   $('#ocr').disabled=true;$('#progress').textContent='\u8aad\u307f\u53d6\u308a\u4e2d\u2026';
   try{
+    if(!(file.type==='application/pdf'||/\.pdf$/i.test(file.name))){
+      const reader=await readReceipt({file,onProgress:p=>$('#progress').textContent=`読み取り中… ${p}%`});
+      pendingOcr={status:'completed',rawText:reader.rawText,correctedText:'',processedAt:new Date().toISOString(),engine:reader.provider==='openai'?'OpenAI Vision Receipt Reader':'Tesseract.js (local jpn)',confidence:reader.metadata?.confidence??null,preprocessing:reader.metadata?.preprocessing||null,itemExtraction:reader.quality,readerProvider:reader.provider};
+      $('#raw').value=pendingOcr.rawText;$('#corrected').value='';
+      const itemCandidateResult=window.receiptItemsController?.applyReceiptReaderCandidates(reader);
+      if(itemCandidateResult?.quality) pendingOcr.itemExtraction=itemCandidateResult.quality;
+      candidates();
+      if(itemCandidateResult?.quality?.candidateCount===0){$('#progress').textContent='商品明細を十分に認識できませんでした。原本を確認して再試行してください。';$('#filemsg').textContent='商品候補0件は読み取り成功として扱いません。原本は保存されています。';}
+      else{$('#progress').textContent='購入品候補 '+(itemCandidateResult?.quality?.candidateCount||0)+'件を読み取りました'+(itemCandidateResult?.retained?'（人が入力済みの明細は上書きしません）':'');}
+      return;
+    }
     pendingOcr=file.type==='application/pdf'||/\.pdf$/i.test(file.name)?await extractPdfText(file):await recognizeImage(file,p=>$('#progress').textContent=`\u8aad\u307f\u53d6\u308a\u4e2d\u2026 ${p}%`);
     $('#raw').value=pendingOcr.rawText;$('#corrected').value=pendingOcr.correctedText;
     const itemCandidateResult=window.receiptItemsController?.applyOcrCandidates($('#corrected').value||$('#raw').value);

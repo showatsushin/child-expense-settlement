@@ -1,4 +1,5 @@
 import { createLocalJWKSet, jwtVerify } from 'jose';
+import { MAX_RECEIPT_READER_BODY_BYTES, readReceiptWithOpenAi, validateReceiptReadInput } from './receiptReader.js';
 
 export const MODEL_ID = '@cf/meta/llama-3.1-8b-instruct-fast';
 export const ALLOWED_CATEGORIES = Object.freeze(['食費', '衣類', '医療費', '教育費', '学校費', '保育費', '習い事', '交通費', '通信費', '日用品', '住居関連', '行事費', '保険', 'その他']);
@@ -107,6 +108,21 @@ export async function handleRequest(request, env, dependencies = {}) {
   const requestId = crypto.randomUUID(); const startedAt = Date.now(); let origin = '';
   try {
     origin = allowedOrigin(request, env); const url = new URL(request.url); const itemRequest = url.pathname === '/suggest-item';
+    const readerRequest = url.pathname === '/read-receipt';
+    if (readerRequest) {
+      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
+      if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
+      const contentLength = Number(request.headers.get('content-length') || 0); if (contentLength > MAX_RECEIPT_READER_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
+      const bodyText = await request.text(); if (byteLength(bodyText) > MAX_RECEIPT_READER_BODY_BYTES) throw new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Payload is too large');
+      let body; try { body = JSON.parse(bodyText); } catch { throw new HttpError(400, 'MALFORMED_REQUEST', 'Request JSON is invalid'); }
+      let input; try { input = validateReceiptReadInput(body); } catch (error) { throw new HttpError(/large/i.test(error.message) ? 413 : 400, /large/i.test(error.message) ? 'PAYLOAD_TOO_LARGE' : 'INVALID_RECEIPT_IMAGE', error.message); }
+      const claims = await (dependencies.verifyToken || verifySupabaseToken)(bearer(request), env); checkRateLimit(claims.sub);
+      let normalized;
+      try { normalized = await (dependencies.readReceipt || readReceiptWithOpenAi)(input, env, { fetchImpl: dependencies.fetchOpenAi || fetch }); }
+      catch (error) { const code = error?.code || 'OPENAI_UNAVAILABLE'; const status = code === 'OPENAI_TIMEOUT' ? 504 : code === 'OPENAI_NOT_CONFIGURED' ? 503 : 502; throw new HttpError(status, code, 'High-accuracy receipt reading failed'); }
+      console.log(JSON.stringify({ event: 'read_receipt', provider: 'openai', requestId, status: 200, latencyMs: Date.now() - startedAt, model: normalized.metadata?.model || null, usage: normalized.metadata?.usage || null }));
+      return response(normalized, 200, origin);
+    }
     if (!itemRequest && url.pathname !== '/suggest-expense') throw new HttpError(404, 'NOT_FOUND', 'Not found');
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(origin) });
     if (request.method !== 'POST') throw new HttpError(405, 'METHOD_NOT_ALLOWED', 'Use POST');
