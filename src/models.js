@@ -21,8 +21,8 @@ export function makeId(prefix) {
   return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
-export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr } = {}) {
-  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, ocr: normalizeOcr(ocr) };
+export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr, status = 'attached' } = {}) {
+  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
 }
 
 export function normalizeOcr(ocr) {
