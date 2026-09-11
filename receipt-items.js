@@ -20,17 +20,14 @@ let host;
 
 function totals() {
   const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const claimTotal = items
-    .filter((item) => item.submissionStatus === 'included')
+  const claimTotal = items.filter((item) => item.submissionStatus === 'included')
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const receiptTotal = Number($('#form')?.amount?.value || 0);
   return { itemTotal, claimTotal, receiptTotal, difference: receiptTotal - itemTotal };
 }
 
 function categoryOptions() {
-  return ITEM_CATEGORY_OPTIONS
-    .map((value) => '<option value="' + esc(value) + '"></option>')
-    .join('');
+  return ITEM_CATEGORY_OPTIONS.map((value) => '<option value="' + esc(value) + '"></option>').join('');
 }
 
 function knowledgeControl(item) {
@@ -53,7 +50,7 @@ function knowledgeControl(item) {
       + '<dt>source</dt><dd>' + esc(selected.source) + '</dd>'
       + '<dt>version</dt><dd>' + esc(selected.version) + '</dd>'
       + '</dl><pre>' + esc(selected.sourceExcerpt) + '</pre></details>'
-    : '<p class="help">候補を選ぶと、利用者提供資料の原文を購入目的欄へそのまま反映します。</p>';
+    : '<p class="help">該当なしを選んだ場合も、種別と購入目的・必要性を自由に入力して登録できます。</p>';
 
   return '<section class="item-knowledge"><label>購入目的Knowledge'
     + '<select data-knowledge-key>' + options + '</select></label>'
@@ -66,27 +63,39 @@ function row(item, index) {
     ['excluded', '提出しない'],
     ['review', '要確認'],
   ].map(([value, label]) => '<option value="' + value + '"'
-    + (value === item.submissionStatus ? ' selected' : '') + '>'
+    + (item.submissionStatus === value ? ' selected' : '') + '>'
     + label + '</option>').join('');
+  const restore = item.originalKnowledgePurpose
+    ? '<button type="button" class="secondary restore-knowledge" data-action="restore-knowledge">Knowledge原文に戻す</button>'
+    : '';
 
   return '<article class="receipt-item-card" data-id="' + esc(item.id) + '">'
     + '<div class="receipt-item-title"><strong>商品 ' + (index + 1)
-    + (item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
+    + (item.confidence != null && item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
     + '<button type="button" class="small-button danger" data-action="delete">削除</button></div>'
-    + '<div class="receipt-item-grid">'
+    + '<div class="receipt-item-grid item-basics">'
     + '<label>商品名<input data-field="productName" value="' + esc(item.productName) + '"></label>'
     + '<label>数量<input data-field="quantity" type="number" min="0" step="0.01" value="' + esc(item.quantity) + '"></label>'
     + '<label>単価<input data-field="unitPrice" type="number" min="0" step="0.01" value="' + esc(item.unitPrice) + '"></label>'
     + '<label>金額<input data-field="amount" type="number" min="0" step="0.01" value="' + esc(item.amount) + '"></label>'
-    + '<label>種別<input data-field="category" list="receiptItemCategories" value="' + esc(item.category) + '" required></label>'
-    + '<label>提出状態<select data-field="submissionStatus">' + statuses + '</select></label>'
-    + '<label class="full">購入目的・必要性<textarea data-field="purpose" rows="6">'
-    + esc(item.purpose?.value || '') + '</textarea></label>'
-    + '<label class="full">補足事実<textarea data-field="notes" rows="2">' + esc(item.notes || '') + '</textarea></label>'
     + '</div>'
     + knowledgeControl(item)
+    + '<div class="receipt-item-grid item-edit-fields">'
+    + '<label>種別<input data-field="category" list="receiptItemCategories" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
+    + '<label class="full purpose-field">購入目的・必要性'
+    + '<textarea data-field="purpose" data-autogrow rows="8">' + esc(item.purpose?.value || '') + '</textarea>'
+    + restore + '</label>'
+    + '<label class="full">補足事実<textarea data-field="notes" rows="3">' + esc(item.notes || '') + '</textarea></label>'
+    + '<label>提出状態<select data-field="submissionStatus">' + statuses + '</select></label>'
+    + '</div>'
     + '<span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span>'
     + '</article>';
+}
+
+function autoGrow(textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.max(textarea.scrollHeight, 184) + 'px';
 }
 
 function render() {
@@ -102,8 +111,7 @@ function render() {
     : '';
 
   host.innerHTML = '<h3>商品整理</h3>' + quality
-    + '<p class="help">商品ごとにKnowledge候補を人が選び、原文を購入目的・必要性へ反映します。'
-    + '種別・提出状態・購入目的はすべて利用者が確認して確定します。</p>'
+    + '<p class="help">Knowledgeは種別・購入目的の初期値と根拠です。最終的な内容は利用者が自由に編集・確定します。</p>'
     + '<datalist id="receiptItemCategories">' + categoryOptions() + '</datalist>'
     + '<div class="receipt-item-summary">'
     + '<span>レシート総額 ' + yen(summary.receiptTotal) + '</span>'
@@ -111,16 +119,17 @@ function render() {
     + '<span class="' + (summary.difference ? 'difference-warning' : '') + '">整合状態 '
     + (summary.difference ? '差額 ' + yen(summary.difference) : '一致') + '</span>'
     + '<span>提出対象額 ' + yen(summary.claimTotal) + '</span>'
-    + '</div>'
-    + '<div class="receipt-item-toolbar">'
+    + '</div><div class="receipt-item-toolbar">'
     + '<button type="button" class="secondary" data-action="add">+ 商品を追加</button>'
     + '<button type="button" class="secondary" data-action="ocr">OCR候補から追加</button>'
     + '</div><div class="receipt-item-list">'
     + (items.length ? items.map(row).join('') : '<p class="help">商品を追加して確認してください。</p>')
     + '</div>';
+
+  host.querySelectorAll('textarea[data-autogrow]').forEach(autoGrow);
 }
 
-function update(id, field, value) {
+function update(id, field, value, renderAfter = true) {
   const item = items.find((candidate) => candidate.id === id);
   if (!item) return;
   if (['quantity', 'unitPrice', 'amount'].includes(field)) {
@@ -128,14 +137,16 @@ function update(id, field, value) {
   }
   if (field === 'purpose') {
     item.purpose = { value, source: 'manual', confidence: null };
+    item.purposeSource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else if (field === 'category') {
     item.category = String(value || '').trim() || 'その他';
+    item.categorySource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else {
     item[field] = value;
   }
   item.source = 'manual';
   item.confidence = null;
-  render();
+  if (renderAfter) render();
 }
 
 function selectKnowledge(id, key) {
@@ -143,10 +154,22 @@ function selectKnowledge(id, key) {
   if (index < 0) return;
   const current = items[index];
   if (key && hasManualKnowledgeFields(current)) {
-    const confirmed = window.confirm('\u73fe\u5728\u306e\u5165\u529b\u5185\u5bb9\u3092\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f\n\u9078\u629e\u3057\u305fKnowledge\u306e\u539f\u6587\u3068\u7a2e\u5225\u3092\u521d\u671f\u5024\u3068\u3057\u3066\u53cd\u6620\u3057\u307e\u3059\u3002');
+    const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u3092\u3001\u65b0\u3057\u304f\u9078\u629e\u3057\u305fKnowledge\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
     if (!confirmed) { render(); return; }
   }
   items[index] = applySelectedKnowledge(current, key);
+  render();
+}
+
+function restoreKnowledgePurpose(id) {
+  const item = items.find((candidate) => candidate.id === id);
+  if (!item?.originalKnowledgePurpose) return;
+  const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u30fb\u5fc5\u8981\u6027\u3092Knowledge\u306e\u5143\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
+  if (!confirmed) return;
+  item.purpose = { value: item.originalKnowledgePurpose, source: 'knowledge', confidence: 1 };
+  item.purposeSource = 'knowledge';
+  item.source = 'manual';
+  item.confidence = null;
   render();
 }
 
@@ -183,16 +206,10 @@ function applyOcrCandidates(text) {
   if (shouldAutofillOcrCandidates(items, candidates)) {
     items = candidates.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 }));
     render();
-    return {
-      candidateCount: candidates.length, added: candidates.length, retained: false,
-      headers: result.headers, quality: result.quality,
-    };
+    return { candidateCount: candidates.length, added: candidates.length, retained: false, headers: result.headers, quality: result.quality };
   }
   render();
-  return {
-    candidateCount: candidates.length, added: 0, retained: items.length > 0,
-    headers: result.headers, quality: result.quality,
-  };
+  return { candidateCount: candidates.length, added: 0, retained: items.length > 0, headers: result.headers, quality: result.quality };
 }
 
 function handleAction(button) {
@@ -208,9 +225,12 @@ function handleAction(button) {
     return;
   }
   const card = button.closest('[data-id]');
-  if (action === 'delete' && card) {
+  if (!card) return;
+  if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
     render();
+  } else if (action === 'restore-knowledge') {
+    restoreKnowledgePurpose(card.dataset.id);
   }
 }
 
@@ -227,7 +247,9 @@ function applyReceiptReaderCandidates(reader) {
       unitPrice: item.unitPrice == null ? item.amount : item.unitPrice,
       amount: item.amount,
       category: 'その他',
+      categorySource: 'manual',
       purpose: { value: '', source: 'ocr', confidence: 0 },
+      purposeSource: 'manual',
       submissionStatus: 'review',
       source: 'ocr',
       confidence: item.confidence,
@@ -248,22 +270,14 @@ function applyReceiptReaderCandidates(reader) {
     render();
     return {
       candidateCount: candidates.length, added: candidates.length, retained: false,
-      headers: {
-        vendor: result.vendor || '',
-        purchaseDate: result.purchaseDate || '',
-        receiptTotalAmount: result.receiptTotalAmount ?? null,
-      },
+      headers: { vendor: result.vendor || '', purchaseDate: result.purchaseDate || '', receiptTotalAmount: result.receiptTotalAmount ?? null },
       quality: ocrQuality,
     };
   }
   render();
   return {
     candidateCount: candidates.length, added: 0, retained: items.length > 0,
-    headers: {
-      vendor: result.vendor || '',
-      purchaseDate: result.purchaseDate || '',
-      receiptTotalAmount: result.receiptTotalAmount ?? null,
-    },
+    headers: { vendor: result.vendor || '', purchaseDate: result.purchaseDate || '', receiptTotalAmount: result.receiptTotalAmount ?? null },
     quality: ocrQuality,
   };
 }
@@ -279,14 +293,18 @@ function install() {
 
   host.addEventListener('input', (event) => {
     const card = event.target.closest('[data-id]');
-    if (card && event.target.dataset.field) update(card.dataset.id, event.target.dataset.field, event.target.value);
+    if (!card || !event.target.dataset.field) return;
+    const field = event.target.dataset.field;
+    const keepEditing = ['productName', 'category', 'purpose', 'notes'].includes(field);
+    update(card.dataset.id, field, event.target.value, !keepEditing);
+    if (field === 'purpose') autoGrow(event.target);
   });
   host.addEventListener('change', (event) => {
     const card = event.target.closest('[data-id]');
     if (!card) return;
     if (event.target.dataset.knowledgeKey !== undefined) {
       selectKnowledge(card.dataset.id, event.target.value);
-    } else if (event.target.dataset.field) {
+    } else if (event.target.dataset.field && event.target.dataset.field !== 'purpose') {
       update(card.dataset.id, event.target.dataset.field, event.target.value);
     }
   });
@@ -299,8 +317,8 @@ function install() {
   window.receiptItemsController = {
     getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })),
     setItems: (value) => {
-      items = (Array.isArray(value) ? value : [])
-        .map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 }));
+      items = (Array.isArray(value) ? value : []).map((item, index) =>
+        createReceiptItem({ ...item, lineOrder: index + 1 }));
       render();
     },
     applyOcrCandidates,

@@ -5,3 +5,18 @@
 
 .reader-ab-test{margin:20px 0;padding:20px;border:2px solid #8c5d00;background:#fffaf0}.reader-ab-test h2{margin-bottom:8px;color:#6c4700}.reader-ab-notice{margin:0 0 14px;color:#5e5037}.reader-ab-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.reader-ab-controls input{width:auto;margin:0}.reader-ab-status{min-height:22px;margin:12px 0;color:var(--navy);font-weight:700}.reader-ab-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.reader-ab-card{min-width:0;border:1px solid var(--line);background:#fff;padding:14px}.reader-ab-card h4{margin:0 0 10px;font-size:17px}.reader-ab-card h5{margin:16px 0 7px;font-size:13px}.reader-ab-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;border-top:1px solid var(--line);border-left:1px solid var(--line)}.reader-ab-metric{padding:7px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}.reader-ab-metric dt{color:var(--muted);font-size:11px}.reader-ab-metric dd{margin:2px 0 0;font-weight:700;overflow-wrap:anywhere}.reader-ab-items{white-space:normal;font-size:12px}.reader-ab-items th,.reader-ab-items td{padding:7px}.reader-ab-raw{margin-top:12px}.reader-ab-raw pre{max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;padding:10px;background:#f5f8f9;border:1px solid var(--line)}@media(max-width:720px){.reader-ab-grid{grid-template-columns:1fr}.reader-ab-metrics{grid-template-columns:1fr}.reader-ab-controls input{width:100%}.reader-ab-controls button{width:100%}}
 .reader-ab-summary{cursor:pointer;color:#6c4700;font-weight:800}.reader-ab-test[open]>.reader-ab-summary{margin-bottom:16px}.reader-ab-panel{padding-top:2px}
+
+/* Human Knowledge selection flow for ReceiptItem cards. */
+.item-basics{margin-bottom:14px}
+.item-knowledge{margin:14px 0;padding:14px;border:1px solid #c9d9df;background:#f7fbfc}
+.item-knowledge>label{max-width:520px}
+.knowledge-source{margin-top:10px}
+.knowledge-source summary{cursor:pointer;font-weight:700;color:var(--navy)}
+.knowledge-source dl{display:grid;grid-template-columns:90px 1fr;margin:10px 0 0}
+.knowledge-source dt,.knowledge-source dd{margin:0;padding:5px 0;border-bottom:1px solid var(--line)}
+.knowledge-source dt{font-weight:700;color:var(--muted)}
+.knowledge-source pre{max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:10px 0 0;padding:10px;background:#fff;border:1px solid var(--line);font:inherit}
+.item-edit-fields{margin-top:14px}
+.purpose-field textarea[data-autogrow]{min-height:184px;resize:vertical;overflow:hidden;line-height:1.65}
+.restore-knowledge{width:auto;margin-top:8px}
+@media(max-width:720px){.item-knowledge{padding:12px}.knowledge-source dl{grid-template-columns:76px 1fr}.restore-knowledge{width:100%}}

@@ -21,3 +21,20 @@ test('receipt items expose primary OCR application and human Knowledge selection
   assert.doesNotMatch(items, /data-category-proposal/);
   assert.doesNotMatch(html, /reason-suggestions\.js/);
 });
+
+test('item card places Knowledge before editable final fields and supports restore and auto-grow', () => {
+  const items = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+
+  const cardMarkup = items.slice(items.indexOf('function row('), items.indexOf('function autoGrow('));
+  assert.ok(cardMarkup.indexOf('item-basics') < cardMarkup.indexOf('knowledgeControl(item)'));
+  assert.ok(cardMarkup.indexOf('knowledgeControl(item)') < cardMarkup.indexOf('item-edit-fields'));
+  assert.match(items, /placeholder="候補から選択または自由入力"/);
+  assert.match(items, /data-autogrow rows="8"/);
+  assert.match(items, /Knowledge原文に戻す/);
+  assert.match(items, /restoreKnowledgePurpose/);
+  assert.match(items, /manual_override/);
+  assert.match(items, /keepEditing/);
+  assert.doesNotMatch(items, /readOnly|disabled/);
+  assert.match(css, /textarea\[data-autogrow\]/);
+});
