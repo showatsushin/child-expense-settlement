@@ -5,7 +5,7 @@ import { prepareReceiptImageForVision } from './receiptVisionImage.js';
 import { getAiWorkerUrl } from './expenseSuggestion.js';
 
 export const RECEIPT_READER_PROVIDERS = Object.freeze(['tesseract', 'openai']);
-export const DEFAULT_RECEIPT_READER_PROVIDER = 'tesseract';
+export const DEFAULT_RECEIPT_READER_PROVIDER = 'openai';
 export class ReceiptReaderError extends Error { constructor(code = 'RECEIPT_READER_UNAVAILABLE') { super('高精度読み取りに失敗しました。原本を確認して再試行してください。'); this.code = code; } }
 const asText = (value, limit = 1000) => typeof value === 'string' && value.trim() ? value.trim().slice(0, limit) : null;
 const asNumber = (value) => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
