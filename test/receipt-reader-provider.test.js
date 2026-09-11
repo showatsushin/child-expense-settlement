@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TesseractReceiptReader, compareReceiptReaderResults, configuredReceiptReaderProvider, evaluateReceiptReaderQuality, normalizeReceiptReaderResult } from '../src/services/receiptReaderProvider.js';
+import { TesseractReceiptReader, configuredReceiptReaderProvider, evaluateReceiptReaderQuality, normalizeReceiptReaderResult } from '../src/services/receiptReaderProvider.js';
 
 test('ReceiptReader Provider contract preserves source text and keeps unknown values null', () => {
   const result = normalizeReceiptReaderResult({ provider: 'openai', rawText: 'SHOP\nwater 100', vendor: 'SHOP', receiptTotalAmount: 100, items: [{ sourceText: 'water 100', productName: 'water', quantity: null, unitPrice: null, amount: 100, confidence: .9, needsReview: false }, { sourceText: 'unclear', productName: null, amount: null, needsReview: true }] });
@@ -17,10 +17,6 @@ test('common quality never fills a missing amount from the receipt total', () =>
   assert.equal(quality.candidateCount, 0); assert.equal(quality.itemTotalAmount, 0); assert.equal(quality.difference, 300); assert.equal(quality.status, 'low_confidence');
 });
 
-test('A/B comparison includes the required reader fields but leaves correctness for human measurement', () => {
-  const comparison = compareReceiptReaderResults({ provider: 'tesseract', rawText: 'a', items: [], warnings: [] }, { provider: 'openai', rawText: 'b', vendor: 'shop', receiptTotalAmount: 100, items: [{ sourceText: 'water 100', productName: 'water', amount: 100, needsReview: false }], warnings: [] });
-  assert.equal(comparison.openai.vendor, 'shop'); assert.equal(comparison.openai.items[0].sourceText, 'water 100'); assert.equal(comparison.humanEvaluation.falseItems, null);
-});
 
 test('production default is OpenAI while Tesseract remains selectable', () => {
   assert.equal(configuredReceiptReaderProvider(undefined), 'openai');
