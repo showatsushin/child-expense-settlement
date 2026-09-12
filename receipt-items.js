@@ -1,5 +1,7 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
+import { itemHistoryCandidates, productHistoryCandidates } from './src/confirmed-history.js';
+import { purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
 import {
   applySelectedKnowledge,
   hasManualKnowledgeFields,
@@ -30,17 +32,28 @@ function categoryOptions() {
   return ITEM_CATEGORY_OPTIONS.map((value) => '<option value="' + esc(value) + '"></option>').join('');
 }
 
+function confirmedHistory() {
+  return window.receiptApp?.getConfirmedHistory?.() || {};
+}
+
+function uniqueKnowledge(entries) {
+  return entries.filter((entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) === index);
+}
+
 function knowledgeControl(item) {
   const selected = selectedKnowledge(item);
+  const historical = itemHistoryCandidates(confirmedHistory(), item.productName)
+    .map((entry) => purchasePurposeKnowledgeByKey(entry.knowledgeKey)).filter(Boolean);
   const matches = knowledgeCandidatesForProduct(item.productName);
-  const candidates = selected && !matches.some((entry) => entry.key === selected.key)
-    ? [selected, ...matches]
-    : matches;
+  const candidates = uniqueKnowledge([selected, ...historical, ...matches].filter(Boolean));
+  const historicalKeys = new Set(historical.map((entry) => entry.key));
+  const option = (entry) => '<option value="' + esc(entry.key) + '"'
+    + (item.knowledgeKey === entry.key ? ' selected' : '') + '>'
+    + esc(entry.category) + '</option>';
   const options = [
     '<option value="">該当なし（手入力）</option>',
-    ...candidates.map((entry) => '<option value="' + esc(entry.key) + '"'
-      + (item.knowledgeKey === entry.key ? ' selected' : '') + '>'
-      + esc(entry.category) + '</option>'),
+    ...(historicalKeys.size ? ['<optgroup label="過去に確定">', ...candidates.filter((entry) => historicalKeys.has(entry.key)).map(option), '</optgroup>'] : []),
+    ...(candidates.some((entry) => !historicalKeys.has(entry.key)) ? ['<optgroup label="Knowledge候補">', ...candidates.filter((entry) => !historicalKeys.has(entry.key)).map(option), '</optgroup>'] : []),
   ].join('');
 
   const source = selected
@@ -55,6 +68,17 @@ function knowledgeControl(item) {
   return '<section class="item-knowledge"><label>購入目的Knowledge'
     + '<select data-knowledge-key>' + options + '</select></label>'
     + source + '</section>';
+}
+
+function categoryHistoryList(item) {
+  const id = 'confirmedCategoryHistory-' + esc(item.id);
+  const categories = [
+    ...itemHistoryCandidates(confirmedHistory(), item.productName).map((entry) => entry.category),
+    ...ITEM_CATEGORY_OPTIONS,
+  ].filter(Boolean).filter((entry, index, entries) => entries.indexOf(entry) === index);
+  return '<datalist id="' + id + '">'
+    + categories.map((entry) => '<option value="' + esc(entry) + '"></option>').join('')
+    + '</datalist>';
 }
 
 function row(item, index) {
@@ -74,14 +98,15 @@ function row(item, index) {
     + (item.confidence != null && item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
     + '<button type="button" class="small-button danger" data-action="delete">削除</button></div>'
     + '<div class="receipt-item-grid item-basics">'
-    + '<label>商品名<input data-field="productName" value="' + esc(item.productName) + '"></label>'
+    + '<label>商品名<input data-field="productName" list="confirmedProductHistory" value="' + esc(item.productName) + '"></label>'
     + '<label>数量<input data-field="quantity" type="number" min="0" step="0.01" value="' + esc(item.quantity) + '"></label>'
     + '<label>単価<input data-field="unitPrice" type="number" min="0" step="0.01" value="' + esc(item.unitPrice) + '"></label>'
     + '<label>金額<input data-field="amount" type="number" min="0" step="0.01" value="' + esc(item.amount) + '"></label>'
     + '</div>'
     + knowledgeControl(item)
     + '<div class="receipt-item-grid item-edit-fields">'
-    + '<label>種別<input data-field="category" list="receiptItemCategories" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
+    + '<label>種別<input data-field="category" list="confirmedCategoryHistory-' + esc(item.id) + '" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
+    + categoryHistoryList(item)
     + '<label class="full purpose-field">購入目的・必要性'
     + '<textarea data-field="purpose" data-autogrow rows="8">' + esc(item.purpose?.value || '') + '</textarea>'
     + restore + '</label>'
@@ -113,6 +138,7 @@ function render() {
   host.innerHTML = '<h3>商品整理</h3>' + quality
     + '<p class="help">Knowledgeは種別・購入目的の初期値と根拠です。最終的な内容は利用者が自由に編集・確定します。</p>'
     + '<datalist id="receiptItemCategories">' + categoryOptions() + '</datalist>'
+    + '<datalist id="confirmedProductHistory">' + productHistoryCandidates(confirmedHistory()).map((entry) => '<option value="' + esc(entry.productName) + '"></option>').join('') + '</datalist>'
     + '<div class="receipt-item-summary">'
     + '<span>レシート総額 ' + yen(summary.receiptTotal) + '</span>'
     + '<span>商品明細合計 ' + yen(summary.itemTotal) + '</span>'
