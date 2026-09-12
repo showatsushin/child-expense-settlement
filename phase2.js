@@ -13,6 +13,7 @@ import { normalizeHistoryText, recordConfirmedHistory, vendorHistoryCandidatesFo
 
 const $ = (s) => document.querySelector(s); const f = (v) => v?.value ?? v ?? ''; const yen = (n) => `¥${Number(n || 0).toLocaleString('ja-JP')}`;
 const currentUser = await requireAuthenticatedUser();
+const LEGACY_REASON_OPTIONS = ['入院期間中、娘掛かった費用', '入学準備品', '障害福祉サービス利用費用', '娘の障害特性かつその時々の体調により交通機関を利用することが難しいため、タクシーを利用', '娘を養育するうえで掛かった特別費'];
 const storage = createUserStorage(currentUser.id);
 const { saveFile, getFile, deleteFile } = storage;
 let state = storage.loadMigratedState(); let records = state.records, evidences = state.evidences, children = state.children; let confirmedHistory = storage.loadConfirmedHistory(); let readerVendorCandidate = ''; let editId = null, pendingFile = null, pendingEvidenceId = null, pendingOcr = null, sources = {}, previewUrl = null, unorganizedPreviewUrls = [], unorganizedPreviewGeneration = 0;
@@ -32,6 +33,39 @@ const unorganizedBox=document.createElement('section');unorganizedBox.id='unorga
 
 function persist(){ storage.saveMigratedState({records,evidences,children}); }
 function setup(){ const child=$('#child'),cat=$('#category'),set=$('#settlement'),filter=$('#filter'); child.innerHTML='<option value="">選択してください</option>'+children.map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); cat.innerHTML='<option value="">選択してください</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); set.innerHTML=SETTLEMENT_OPTIONS.map(x=>`<option>${x}</option>`).join(''); filter.innerHTML='<option value="">すべての費目</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); }
+const setupBase = setup;
+setup = function setupLegacyReasonField(){
+  setupBase();
+  const textarea = $('#form').reason;
+  const select = document.createElement('select');
+  select.name = 'reason';
+  select.required = false;
+  select.innerHTML = '<option value="">選択してください</option>' + LEGACY_REASON_OPTIONS.map((value) => `<option value="${value}">${value}</option>`).join('');
+  textarea.replaceWith(select);
+};
+const resetBase = reset;
+reset = async function resetWithNewBurdenDefaults(options = {}) {
+  await resetBase(options);
+  const form = $('#form');
+  [...form.reason.options].filter((option) => option.dataset.existingLegacyValue).forEach((option) => option.remove());
+  form.reason.value = '';
+  form.selfRate.value = 0;
+  form.otherRate.value = 100;
+  calc();
+};
+const editBase = edit;
+edit = async (id) => {
+  const record = records.find((item) => item.id === id);
+  const legacyReason = f(record?.reason);
+  const field = $('#form').reason;
+  if (legacyReason && ![...field.options].some((option) => option.value === legacyReason)) {
+    const option = new Option(`既存値（変更なし）：${legacyReason}`, legacyReason, true, true);
+    option.dataset.existingLegacyValue = 'true';
+    field.append(option);
+  }
+  await editBase(id);
+  if (legacyReason) field.value = legacyReason;
+};
 function markLegacyHeaderFields(){
   const mark=(selector,label,hint)=>{const field=$(selector);const container=field?.closest('label');if(!container)return;container.classList.add('legacy-header-field');const textNode=[...container.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.trim());if(textNode)textNode.textContent=label;const note=document.createElement('span');note.className='hint';note.textContent=hint;container.append(note);};
   mark('#category','\u65e7\u4f1a\u8a08\u8cbb\u76ee\uff08\u65e2\u5b58\u53f0\u5e33\u4e92\u63db\uff09','\u65b0\u898f\u767b\u9332\u306e\u7a2e\u5225\u306f\u3001\u8cfc\u5165\u54c1\u660e\u7d30\u3054\u3068\u306b\u78ba\u8a8d\u3057\u307e\u3059\u3002');

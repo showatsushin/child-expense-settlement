@@ -1,5 +1,6 @@
 ﻿import { buildEvidenceManifest } from './src/evidence-manifest.js';
 import { calculateReceiptSummary, receiptClaimTotal, receiptTotal } from './src/calculations.js';
+import { buildSubmissionBundles } from './src/submission-bundles.js';
 import { makeReceiptItemsCsv, makeReceiptSummaryCsv, downloadReceiptCsv } from './src/export.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -15,4 +16,51 @@ async function renderSubmission() {
   view.querySelector('[data-print]').onclick = () => window.print(); view.querySelector('[data-close]').onclick = () => view.remove();
 }
 async function install() { const current = await app(); const header = document.querySelector('.top > div:last-child'); if (!header) return; const submission = document.createElement('button'); submission.type='button'; submission.textContent='\u63d0\u51fa\u7528\u8cc7\u6599\uff0b\u539f\u672c'; submission.className='primary'; submission.onclick=renderSubmission; const csv = document.createElement('button'); csv.type='button'; csv.textContent='\u8cfc\u5165\u54c1CSV'; csv.onclick=() => { const evidenceById = new Map(current.getEvidences().map((evidence) => [evidence.id,evidence])); downloadReceiptCsv(makeReceiptItemsCsv(current.getRecords(),evidenceById),'receipt-items.csv'); downloadReceiptCsv(makeReceiptSummaryCsv(current.getRecords(),evidenceById),'receipt-summary.csv'); }; header.append(csv,submission); }
+function receiptNumber(record, evidence) {
+  return evidence.evidenceNumber || (record.evidenceIds || []).join(' / ') || '証拠番号未設定';
+}
+
+function settlementMarkup(record, evidence) {
+  const items = Array.isArray(record.items) ? record.items : [];
+  const itemRows = items.map((item) => `<tr><td>${esc(item.productName)}</td><td>${esc(item.category)}</td><td>${yen(item.amount)}</td><td>${esc(item.purpose?.value ?? item.purpose)}</td><td>${esc(item.submissionStatus)}</td></tr>`).join('');
+  return `<section class="submission-settlement"><h3>${esc(receiptNumber(record, evidence))} 清算資料</h3><dl><div><dt>購入日</dt><dd>${esc(record.paidDate)}</dd></div><div><dt>購入店</dt><dd>${esc(record.vendor?.value ?? record.vendor)}</dd></div><div><dt>レシート総額</dt><dd>${yen(receiptTotal(record))}</dd></div><div><dt>提出対象額</dt><dd>${yen(receiptClaimTotal(record))}</dd></div></dl><table><thead><tr><th>商品名</th><th>種別</th><th>金額</th><th>購入目的・必要性</th><th>提出状態</th></tr></thead><tbody>${itemRows || '<tr><td colspan="5">購入品明細はありません。</td></tr>'}</tbody></table></section>`;
+}
+
+async function renderSubmissionInEvidenceOrder() {
+  const current = await app();
+  const records = current.getRecords();
+  const summary = calculateReceiptSummary(records);
+  const view = openView();
+  view.innerHTML = `<div class="print-toolbar"><button type="button" class="primary" data-print>この内容を印刷 / PDF保存</button><button type="button" class="secondary" data-close>戻る</button></div><article class="print-sheet"><h1>清算資料＋原本証拠</h1><section><h2>清算概要</h2><p>レシート件数: ${summary.receiptCount}件　レシート総額: ${yen(summary.receiptTotalAmount)}　提出対象額: ${yen(summary.claimTotalAmount)}</p></section><section id="submissionBundles"></section></article>`;
+  const host = view.querySelector('#submissionBundles');
+  for (const bundle of buildSubmissionBundles(records, current.getEvidences())) {
+    const pair = document.createElement('section');
+    pair.className = 'receipt-evidence-set';
+    pair.dataset.evidenceNumber = bundle.evidence.evidenceNumber;
+    pair.innerHTML = bundle.receipts.length ? bundle.receipts.map((record) => settlementMarkup(record, bundle.evidence)).join('') : `<section class="submission-settlement"><h3>${esc(bundle.evidence.evidenceNumber)} 清算資料</h3><p>紐付くレシートはありません。</p></section>`;
+    const original = document.createElement('article');
+    original.className = 'submitted-evidence';
+    original.innerHTML = `<h3>${esc(bundle.evidence.evidenceNumber)} 原本証拠</h3><p>${esc(bundle.evidence.fileName)}</p>`;
+    const file = await current.getFile(bundle.evidence.id);
+    if (!file) original.insertAdjacentHTML('beforeend', '<p class="difference-warning">原本ファイルがこの端末にありません。</p>');
+    else {
+      const url = URL.createObjectURL(file);
+      if (isPdf(bundle.evidence)) original.insertAdjacentHTML('beforeend', `<p>PDF原本: <a href="${url}" target="_blank" rel="noopener">${esc(bundle.evidence.fileName)}を開く</a></p>`);
+      else original.append(Object.assign(document.createElement('img'), { src: url, alt: `${bundle.evidence.evidenceNumber} ${bundle.evidence.fileName}` }));
+    }
+    pair.append(original);
+    host.append(pair);
+  }
+  view.querySelector('[data-print]').onclick = () => window.print();
+  view.querySelector('[data-close]').onclick = () => view.remove();
+}
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button || button.textContent !== '提出用資料＋原本') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  renderSubmissionInEvidenceOrder();
+}, true);
+
 install();

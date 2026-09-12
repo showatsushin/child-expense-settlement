@@ -9,6 +9,14 @@ test('OCR completion sends candidates to the ReceiptItem controller and removes 
   assert.equal(phase2.includes("['reason','理由',c.reasons]"), false);
 });
 
+test('new records default the other burden rate to 100 and keep legacy reasons separate from item Knowledge', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  assert.match(phase2, /const LEGACY_REASON_OPTIONS = \[[^\]]{100,}\]/);
+  assert.match(phase2, /form\.selfRate\.value = 0/);
+  assert.match(phase2, /form\.otherRate\.value = 100/);
+  assert.match(phase2, /既存値（変更なし）/);
+});
+
 test('receipt items expose primary OCR application and human Knowledge selection, not AI purpose controls', () => {
   const items = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');

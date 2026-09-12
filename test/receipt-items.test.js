@@ -5,6 +5,7 @@ import { migratePhase1Data, SCHEMA_VERSION } from '../src/migrations.js';
 import { calculateReceiptSummary, receiptDifference, receiptClaimTotal, receiptItemTotal } from '../src/calculations.js';
 import { extractReceiptItemCandidates } from '../src/receipt-item-ocr.js';
 import { buildEvidenceManifest, receiptEvidenceRows } from '../src/evidence-manifest.js';
+import { buildSubmissionBundles } from '../src/submission-bundles.js';
 import { buildWorkbookData } from '../src/output-models.js';
 import { databaseNameForUser } from '../src/user-storage.js';
 
@@ -67,6 +68,20 @@ test('evidence manifest supports multiple originals, PDF and missing original me
   assert.deepEqual(entries.map((entry) => entry.evidence.evidenceNumber), ['E-001', 'E-002']);
   assert.equal(entries[0].receipts[0].id, 'r');
   assert.deepEqual(receiptEvidenceRows(records, entries.map((entry) => entry.evidence))[0].evidenceNumbers, ['E-002', 'E-001']);
+});
+test('submission bundles remain in evidence-number order and keep each receipt with its original', () => {
+  const records = [
+    createExpenseRecord({ id: 'r2', evidenceIds: ['b'], amount: 200, items: [included({ productName: 'two', amount: 200 })] }),
+    createExpenseRecord({ id: 'r1', evidenceIds: ['a'], amount: 100, items: [included({ productName: 'one', amount: 100 })] }),
+  ];
+  const evidences = [
+    { id: 'b', evidenceNumber: 'E-002', fileName: 'two.jpg', mimeType: 'image/jpeg' },
+    { id: 'a', evidenceNumber: 'E-001', fileName: 'one.jpg', mimeType: 'image/jpeg' },
+  ];
+  const bundles = buildSubmissionBundles(records, evidences);
+  assert.deepEqual(bundles.map((bundle) => bundle.evidence.evidenceNumber), ['E-001', 'E-002']);
+  assert.deepEqual(bundles.map((bundle) => bundle.receipts[0].id), ['r1', 'r2']);
+  assert.deepEqual(bundles.map((bundle) => bundle.receipts[0].items.map((item) => item.productName)), [['one'], ['two']]);
 });
 test('workbook contains receipt items, category totals, evidence list and summary', () => {
   const data = buildWorkbookData([createExpenseRecord({ amount: 100, evidenceIds: ['e'], items: [included({ productName: 'x', amount: 100, category: '飲料水' })] })], [{ id: 'e', evidenceNumber: 'E-001', fileName: 'x.jpg', ocr: {} }], []);
