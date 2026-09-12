@@ -81,6 +81,18 @@ function categoryHistoryList(item) {
     + '</datalist>';
 }
 
+function categoryCandidateButtons(item) {
+  const unique = (values) => values.map((value) => String(value || '').trim()).filter(Boolean)
+    .filter((value, index, entries) => entries.indexOf(value) === index);
+  const historical = unique(itemHistoryCandidates(confirmedHistory(), item.productName).map((entry) => entry.category));
+  const existing = ITEM_CATEGORY_OPTIONS.filter((value) => !historical.includes(value));
+  const buttons = (categories) => categories.map((category) => '<button type="button" data-action="apply-category" data-value="'
+    + esc(encodeURIComponent(category)) + '">' + esc(category) + '</button>').join(' ');
+  return '<section class="item-category-candidates"><p class="hint">候補</p>'
+    + (historical.length ? '<p class="hint">過去に確定した種別：' + buttons(historical) + '</p>' : '')
+    + '<p class="hint">既存の種別候補：' + buttons(existing) + '</p></section>';
+}
+
 function productHistoryButtons(item) {
   const candidates = productHistoryCandidates(confirmedHistory(), item.productName).slice(0, 5);
   if (!candidates.length) return '';
@@ -117,6 +129,7 @@ function row(item, index) {
     + '<div class="receipt-item-grid item-edit-fields">'
     + '<label>種別<input data-field="category" list="confirmedCategoryHistory-' + esc(item.id) + '" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
     + categoryHistoryList(item)
+    + categoryCandidateButtons(item)
     + '<label class="full purpose-field">購入目的・必要性'
     + '<textarea data-field="purpose" data-autogrow rows="8">' + esc(item.purpose?.value || '') + '</textarea>'
     + restore + '</label>'
@@ -175,7 +188,7 @@ function update(id, field, value, renderAfter = true) {
     item.purpose = { value, source: 'manual', confidence: null };
     item.purposeSource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else if (field === 'category') {
-    item.category = String(value || '').trim() || 'その他';
+    item.category = String(value || '').trim();
     item.categorySource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else {
     item[field] = value;
@@ -262,7 +275,9 @@ function handleAction(button) {
   }
   const card = button.closest('[data-id]');
   if (!card) return;
-  if (action === 'apply-history-product') {
+  if (action === 'apply-category') {
+    update(card.dataset.id, 'category', decodeURIComponent(button.dataset.value || ''));
+  } else if (action === 'apply-history-product') {
     update(card.dataset.id, 'productName', decodeURIComponent(button.dataset.value || ''));
   } else if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
@@ -284,7 +299,7 @@ function applyReceiptReaderCandidates(reader) {
       quantity: item.quantity == null ? 1 : item.quantity,
       unitPrice: item.unitPrice == null ? item.amount : item.unitPrice,
       amount: item.amount,
-      category: 'その他',
+      category: '',
       categorySource: 'manual',
       purpose: { value: '', source: 'ocr', confidence: 0 },
       purposeSource: 'manual',

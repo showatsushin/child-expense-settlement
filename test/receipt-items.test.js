@@ -35,6 +35,12 @@ test('free-form categories are preserved for aggregation', () => {
   assert.equal(summary.categorySubtotals[0].category, '感覚調整用品');
   assert.equal(summary.categorySubtotals[0].amount, 100);
 });
+test('item categories start empty and are not coerced to その他', () => {
+  const item = createReceiptItem({ productName: '未選択商品', amount: 100 });
+  assert.equal(item.category, '');
+  const summary = calculateReceiptSummary([createExpenseRecord({ amount: 100, items: [included({ amount: 100, category: item.category })] })]);
+  assert.equal(summary.categorySubtotals[0].category, '');
+});
 test('zero and decimal values are safe and do not become NaN', () => {
   const receipt = createExpenseRecord({ amount: 0, receiptTotalAmount: 0, items: [included({ amount: 'bad' }), included({ amount: 1.005 })] });
   assert.equal(receiptItemTotal(receipt), 1.01);
