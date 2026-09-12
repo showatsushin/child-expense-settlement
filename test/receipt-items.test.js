@@ -83,6 +83,18 @@ test('submission bundles remain in evidence-number order and keep each receipt w
   assert.deepEqual(bundles.map((bundle) => bundle.receipts[0].id), ['r1', 'r2']);
   assert.deepEqual(bundles.map((bundle) => bundle.receipts[0].items.map((item) => item.productName)), [['one'], ['two']]);
 });
+test('submission bundles never mix records and can be scoped to one receipt', () => {
+  const records = [
+    createExpenseRecord({ id: 'r1', evidenceIds: ['shared'], amount: 100, items: [included({ productName: 'first', amount: 100 })] }),
+    createExpenseRecord({ id: 'r2', evidenceIds: ['shared'], amount: 200, items: [included({ productName: 'second-a', amount: 100 }), included({ productName: 'second-b', amount: 100 })] }),
+  ];
+  const evidences = [{ id: 'shared', evidenceNumber: 'E-001', fileName: 'shared.jpg', mimeType: 'image/jpeg' }];
+  const all = buildSubmissionBundles(records, evidences);
+  assert.deepEqual(all.map((bundle) => bundle.receipts.map((record) => record.id)), [['r1'], ['r2']]);
+  const one = buildSubmissionBundles([records[1]], evidences);
+  assert.deepEqual(one.map((bundle) => bundle.receipts[0].id), ['r2']);
+  assert.deepEqual(one[0].receipts[0].items.map((item) => item.productName), ['second-a', 'second-b']);
+});
 test('workbook contains receipt items, category totals, evidence list and summary', () => {
   const data = buildWorkbookData([createExpenseRecord({ amount: 100, evidenceIds: ['e'], items: [included({ productName: 'x', amount: 100, category: '飲料水' })] })], [{ id: 'e', evidenceNumber: 'E-001', fileName: 'x.jpg', ocr: {} }], []);
   assert.equal(data.receiptItems[0][0], '証拠番号');

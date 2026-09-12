@@ -9,12 +9,25 @@ test('OCR completion sends candidates to the ReceiptItem controller and removes 
   assert.equal(phase2.includes("['reason','理由',c.reasons]"), false);
 });
 
-test('new records default the other burden rate to 100 and keep legacy reasons separate from item Knowledge', () => {
+test('new records default the other burden rate to 100 and legacy reasons support candidates plus free text', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   assert.match(phase2, /const LEGACY_REASON_OPTIONS = \[[^\]]{100,}\]/);
   assert.match(phase2, /form\.selfRate\.value = 0/);
   assert.match(phase2, /form\.otherRate\.value = 100/);
-  assert.match(phase2, /既存値（変更なし）/);
+  assert.match(phase2, /input\.setAttribute\('list', 'legacyReasonOptions'\)/);
+  assert.match(phase2, /5候補から選択、または自由記載/);
+});
+
+test('submission output uses record-scoped buttons, page breaks, and no submission status display', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const exporter = readFileSync(new URL('../evidence-export.js', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  assert.match(phase2, /dataset\.submissionRecord = receiptId/);
+  assert.match(exporter, /record\.id === receiptId/);
+  assert.match(exporter, /button\[data-submission-record\]/);
+  assert.doesNotMatch(exporter, /submissionStatus|提出状態|提出状況/);
+  assert.match(styles, /submission-settlement\{break-after:page/);
+  assert.match(styles, /label:has\(\[data-field="submissionStatus"\]\)\{display:none\}/);
 });
 
 test('receipt items expose primary OCR application and human Knowledge selection, not AI purpose controls', () => {

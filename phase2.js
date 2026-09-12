@@ -41,7 +41,15 @@ setup = function setupLegacyReasonField(){
   select.name = 'reason';
   select.required = false;
   select.innerHTML = '<option value="">選択してください</option>' + LEGACY_REASON_OPTIONS.map((value) => `<option value="${value}">${value}</option>`).join('');
-  textarea.replaceWith(select);
+  const input = document.createElement('input');
+  input.name = 'reason';
+  input.type = 'text';
+  input.setAttribute('list', 'legacyReasonOptions');
+  input.placeholder = '5候補から選択、または自由記載';
+  const datalist = document.createElement('datalist');
+  datalist.id = 'legacyReasonOptions';
+  datalist.innerHTML = select.innerHTML;
+  textarea.replaceWith(input, datalist);
 };
 const resetBase = reset;
 reset = async function resetWithNewBurdenDefaults(options = {}) {
@@ -65,6 +73,30 @@ edit = async (id) => {
   }
   await editBase(id);
   if (legacyReason) field.value = legacyReason;
+};
+reset = async function resetWithFreeLegacyReason(options = {}) {
+  await resetBase(options);
+  const form = $('#form');
+  form.reason.value = '';
+  form.selfRate.value = 0;
+  form.otherRate.value = 100;
+  calc();
+};
+edit = async (id) => {
+  await editBase(id);
+};
+const renderBase = render;
+render = function renderWithSubmissionButtons(){
+  renderBase();
+  $('#rows').querySelectorAll('button[data-edit]').forEach((editButton) => {
+    const receiptId = editButton.dataset.edit;
+    if (editButton.parentElement.querySelector(`[data-submission-record="${receiptId}"]`)) return;
+    const submission = document.createElement('button');
+    submission.type = 'button';
+    submission.textContent = '提出用資料＋原本';
+    submission.dataset.submissionRecord = receiptId;
+    editButton.after(submission);
+  });
 };
 function markLegacyHeaderFields(){
   const mark=(selector,label,hint)=>{const field=$(selector);const container=field?.closest('label');if(!container)return;container.classList.add('legacy-header-field');const textNode=[...container.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.trim());if(textNode)textNode.textContent=label;const note=document.createElement('span');note.className='hint';note.textContent=hint;container.append(note);};

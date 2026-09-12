@@ -21,4 +21,7 @@
 .item-edit-fields{margin-top:14px}
 .purpose-field textarea[data-autogrow]{min-height:184px;resize:vertical;overflow:hidden;line-height:1.65}
 .restore-knowledge{width:auto;margin-top:8px}
+.receipt-item-card label:has([data-field="submissionStatus"]){display:none}
 @media(max-width:720px){.item-knowledge{padding:12px}.knowledge-source dl{grid-template-columns:76px 1fr}.restore-knowledge{width:100%}}
+
+@media print{.evidence-submission-view .submission-settlement{break-after:page;page-break-after:always}.evidence-submission-view .submitted-evidence{break-after:page;page-break-after:always}.evidence-submission-view .receipt-evidence-set:last-child .submitted-evidence{break-after:auto;page-break-after:auto}}
