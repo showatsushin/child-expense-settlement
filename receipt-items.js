@@ -81,6 +81,15 @@ function categoryHistoryList(item) {
     + '</datalist>';
 }
 
+function productHistoryButtons(item) {
+  const candidates = productHistoryCandidates(confirmedHistory(), item.productName).slice(0, 5);
+  if (!candidates.length) return '';
+  return '<p class="hint">過去に確定した商品名：'
+    + candidates.map((entry) => '<button type="button" data-action="apply-history-product" data-value="'
+      + esc(encodeURIComponent(entry.productName)) + '">' + esc(entry.productName) + '</button>').join(' ')
+    + '</p>';
+}
+
 function row(item, index) {
   const statuses = [
     ['included', '提出する'],
@@ -103,6 +112,7 @@ function row(item, index) {
     + '<label>単価<input data-field="unitPrice" type="number" min="0" step="0.01" value="' + esc(item.unitPrice) + '"></label>'
     + '<label>金額<input data-field="amount" type="number" min="0" step="0.01" value="' + esc(item.amount) + '"></label>'
     + '</div>'
+    + productHistoryButtons(item)
     + knowledgeControl(item)
     + '<div class="receipt-item-grid item-edit-fields">'
     + '<label>種別<input data-field="category" list="confirmedCategoryHistory-' + esc(item.id) + '" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
@@ -252,7 +262,9 @@ function handleAction(button) {
   }
   const card = button.closest('[data-id]');
   if (!card) return;
-  if (action === 'delete') {
+  if (action === 'apply-history-product') {
+    update(card.dataset.id, 'productName', decodeURIComponent(button.dataset.value || ''));
+  } else if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
     render();
   } else if (action === 'restore-knowledge') {

@@ -37,3 +37,18 @@ test('history normalizes duplicates without becoming an expense, evidence, or au
   assert.equal('evidenceIds' in history, false);
   assert.equal('items' in history, true);
 });
+
+test('normalized human-confirmed history ranks Reader spelling variants as explicit correction candidates', () => {
+  const history = recordConfirmedHistory({}, {
+    vendor: 'サンプル薬局',
+    items: [{ productName: '飲料水 500ml', category: '飲料水', knowledgeKey: 'drinking_water' }],
+    confirmedAt: '2026-09-12T12:00:00.000Z',
+  });
+  const readerVendor = 'サンプル 薬局';
+  const readerProduct = '飲料水500ML';
+
+  assert.equal(vendorHistoryCandidates(history, readerVendor)[0].value, 'サンプル薬局');
+  assert.equal(productHistoryCandidates(history, readerProduct)[0].productName, '飲料水 500ml');
+  assert.equal(readerVendor, 'サンプル 薬局');
+  assert.equal(readerProduct, '飲料水500ML');
+});
