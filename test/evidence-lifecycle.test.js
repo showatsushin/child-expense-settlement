@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createEvidenceDocument } from '../src/models.js';
-import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, latestDraftEvidence, markEvidenceUnorganized, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
+import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, discardUnorganizedEvidence, latestDraftEvidence, markEvidenceUnorganized, unorganizedEvidences, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
 
 function file(name = 'receipt.jpg', size = 3) { return { name, type: 'image/jpeg', size }; }
 
@@ -31,6 +31,33 @@ test('saving a draft as unorganized keeps its original blob and does not invoke 
   assert.match(saveAction, /markEvidenceUnorganized/);
   assert.doesNotMatch(saveAction, /readReceipt|recognizeImage|extractPdfText|applyReceiptReaderCandidates/);
   assert.match(phase2.slice(phase2.indexOf('async function ocr')), /readReceipt/);
+});
+
+test('unorganized box filters existing evidence only and deletes only an unreferenced unorganized original', async () => {
+  const evidences = [{ id: 'draft', status: 'draft' }, { id: 'saved', status: 'unorganized' }, { id: 'attached', status: 'attached' }, { id: 'referenced', status: 'unorganized' }];
+  assert.deepEqual(unorganizedEvidences(evidences).map((evidence) => evidence.id), ['saved', 'referenced']);
+  assert.equal(unorganizedEvidences(evidences)[0], evidences[1]);
+
+  const deleted = [];
+  const kept = await discardUnorganizedEvidence({ evidenceId: 'referenced', records: [{ evidenceIds: ['referenced'] }], evidences, deleteFile: async (id) => deleted.push(id) });
+  assert.equal(kept.evidences, evidences); assert.deepEqual(deleted, []);
+
+  const removed = await discardUnorganizedEvidence({ evidenceId: 'saved', records: [], evidences, deleteFile: async (id) => deleted.push(id) });
+  assert.deepEqual(deleted, ['saved']); assert.deepEqual(removed.deletedEvidenceIds, ['saved']); assert.deepEqual(removed.evidences.map((evidence) => evidence.id), ['draft', 'attached', 'referenced']);
+});
+
+test('unorganized box reuses the existing blob preview and has no Reader action', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const boxRender = phase2.slice(phase2.indexOf('async function renderUnorganizedBox'), phase2.indexOf('async function deleteUnorganized'));
+  const boxDelete = phase2.slice(phase2.indexOf('async function deleteUnorganized'), phase2.indexOf('async function ocr'));
+  assert.match(phase2, /id='unorganizedBox'/);
+  assert.match(boxRender, /unorganizedEvidences\(evidences\)/);
+  assert.match(boxRender, /getFile\(evidence\.id\)/);
+  assert.match(boxRender, /renderPreview\(preview,file,evidence\.fileName\)/);
+  assert.match(phase2, /revokeUnorganizedPreviews/);
+  assert.doesNotMatch(boxRender, /saveFile|readReceipt|ocr\(|applyReceiptReaderCandidates/);
+  assert.match(boxDelete, /discardUnorganizedEvidence/);
+  assert.doesNotMatch(boxDelete, /readReceipt|ocr\(|applyReceiptReaderCandidates/);
 });
 
 test('legacy evidence remains attached when no lifecycle status exists', () => {

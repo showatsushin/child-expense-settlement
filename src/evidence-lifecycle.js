@@ -13,6 +13,10 @@ export function markEvidenceUnorganized({ evidenceId, evidences }) {
   return evidence || null;
 }
 
+export function unorganizedEvidences(evidences) {
+  return (Array.isArray(evidences) ? evidences : []).filter((evidence) => evidence?.status === 'unorganized');
+}
+
 export function attachDraftEvidence({ evidenceIds, evidenceId, evidences, ocr }) {
   const evidence = evidences.find((item) => item.id === evidenceId);
   if (evidence) { evidence.status = 'attached'; if (ocr) evidence.ocr = ocr; }
@@ -24,6 +28,14 @@ export async function discardDraftEvidence({ evidenceId, evidences, deleteFile }
   if (!evidence || evidence.status !== 'draft') return evidences;
   await deleteFile(evidence.id);
   return evidences.filter((item) => item.id !== evidence.id);
+}
+
+export async function discardUnorganizedEvidence({ evidenceId, records, evidences, deleteFile }) {
+  const evidence = evidences.find((item) => item.id === evidenceId);
+  const referenced = (records || []).some((record) => (record.evidenceIds || []).includes(evidenceId));
+  if (!evidence || evidence.status !== 'unorganized' || referenced) return { evidences, deletedEvidenceIds: [] };
+  await deleteFile(evidence.id);
+  return { evidences: evidences.filter((item) => item.id !== evidence.id), deletedEvidenceIds: [evidence.id] };
 }
 
 export function latestDraftEvidence(evidences) {
