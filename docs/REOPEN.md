@@ -61,3 +61,40 @@ If continuing OCR work, first run an authenticated production test with a user-p
 - Existing Cloudflare safe diagnostics are live-only: wrangler tail child-expense-ai --format json --status error --search read_receipt. The initial failure preceded observation, and no retry arrived while tail was active, so no requestId, status, stage, upstream status, timeout, structured-output/schema result, item count, second-pass result, or final Worker status was captured.
 - A second error-only tail was prepared for one retry and stopped when the session closed. No source, JWT, receipt text, or AI output was logged or retained.
 - Next Reader diagnosis: start the same error-only tail, wait for confirmation, retry once, then report only safe ai_diagnostic fields. Do not change code until a stage is identified.
+
+## 2026-09-12 handoff: Evidence lifecycle, human-confirmed candidates, and compact mobile UI
+
+### Current baseline
+
+- Branch: `main`
+- HEAD / `origin/main`: `5648bbd9038da29a34251ede3c07e7432d71e930` (`feat: combine vendor candidates`)
+- Working tree: clean at handoff; ahead / behind: `0 / 0`.
+- Production: <https://showatsushin.github.io/child-expense-settlement/>
+- GitHub Pages workflow `34694179282`: success.
+
+### Completed product changes
+
+- Evidence lifecycle is additive: selecting an original creates a `draft`; `未整理に保存` changes that same Evidence to `unorganized` without Reader execution or a second Blob; normal registration uses the existing `attachDraftEvidence()` transition to `attached`.
+- `未整理BOX` is a filtered view of the existing Evidence store (`status === "unorganized"`). It reuses the same Evidence ID and Blob, supports safe deletion of unreferenced unorganized originals, and has `整理する` to reload the existing upper preview. It does not create a mode, a second preview, a second Evidence, or automatically run Reader.
+- `証拠一覧` is now the complementary filtered view (`status === "attached"` only). Unorganized Evidence appears only in `未整理BOX`; Evidence / Blob storage and lifecycle contracts were not changed.
+- Both `証拠一覧` and `未整理BOX` use closed native `<details>` sections with counts derived on each render.
+- Human-confirmed history remains separate from Evidence and ReceiptItems, in the authenticated user namespace `confirmedHistory.v1`. Only explicit registration saves vendor, product, category, and selected Knowledge values. History never auto-confirms a value.
+- Product category is free text with an empty initial value. It offers compact, collapsible `過去に確定` and normal `候補` groups; a click is required to apply a candidate. Free-form categories remain stored and aggregated, and Knowledge logic was not changed.
+- Vendor candidates are grouped as Reader, OCR, and historical values. Clicking one appends it to the existing `支払先` value as `既存値（候補）`; repeated normalized values are not appended. The input remains freely editable, and the final source of truth is the one human-confirmed vendor string at registration.
+
+### Non-goals preserved
+
+- No Reader-engine, OCR structured-output, Worker, Knowledge matching, purchase-purpose, Evidence/Blob schema, capture/organize mode, `currentEvidence`, or preview-duplication work was introduced.
+- Candidate display and selection do not call Reader or auto-register data.
+
+### Latest verification
+
+- Frontend tests: `93` passed.
+- `node --check phase2.js`: passed.
+- `npm run build`: passed.
+- `git diff --check`: passed before each production commit.
+- GitHub Pages build and deployment succeeded for the current HEAD.
+
+### Safe next step
+
+Do not begin a new phase implicitly. First conduct the user-side production checks for the latest candidate UI: select Reader and OCR vendor candidates sequentially, verify duplicate prevention and free editing, and verify the compact category-candidate disclosure on a phone-width layout. Only begin additional work after an explicit next-stage instruction.
