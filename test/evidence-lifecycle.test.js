@@ -66,6 +66,17 @@ test('evidence list selects attached originals while the unorganized box selects
   assert.equal(attachedEvidences(evidences)[0], evidences[0]);
 });
 
+test('vendor candidates expose Reader, OCR, and history groups and append selected values without duplicates', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const vendorUi = phase2.slice(phase2.indexOf('function applyVendorCandidate'), phase2.indexOf('function saveConfirmedHistoryFromRecord'));
+  assert.match(vendorUi, /Reader候補/);
+  assert.match(vendorUi, /OCR候補/);
+  assert.match(vendorUi, /過去に確定した店名/);
+  assert.match(vendorUi, /extractSuggestions\(text\)\.vendors/);
+  assert.match(vendorUi, /field\.value=`\$\{current\}（\$\{candidate\}）`/);
+  assert.match(vendorUi, /normalizeHistoryText\(current\)\.includes\(normalizeHistoryText\(candidate\)\)/);
+});
+
 test('unorganized box reuses the existing blob preview and has no Reader action', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   const boxRender = phase2.slice(phase2.indexOf('async function renderUnorganizedBox'), phase2.indexOf('async function deleteUnorganized'));
