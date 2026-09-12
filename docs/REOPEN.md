@@ -98,3 +98,32 @@ If continuing OCR work, first run an authenticated production test with a user-p
 ### Safe next step
 
 Do not begin a new phase implicitly. First conduct the user-side production checks for the latest candidate UI: select Reader and OCR vendor candidates sequentially, verify duplicate prevention and free editing, and verify the compact category-candidate disclosure on a phone-width layout. Only begin additional work after an explicit next-stage instruction.
+
+## 2026-09-12 completion record: Period expense list
+
+### Production baseline
+
+- Production feature commit: `f19a8dd815ef3c1eeeadb7b9512cf642406ac84f` (`feat: add period expense list`).
+- GitHub Pages workflow: `34698798692`, build and deploy both `success`.
+- Production: <https://showatsushin.github.io/child-expense-settlement/>.
+
+### Completed change
+
+- Added `期間別支出一覧` immediately after the registered-receipt table.
+- It defaults to the current month and supports `今月`, `先月`, `全期間`, and explicit start/end payment-date filtering.
+- Each receipt row displays evidence number, payment date, payee, category, legacy expense reason, receipt total, submission total, other-party burden rate, and other-party burden amount.
+- The selected-period totals include receipt total, submission total, and other-party burden amount.
+- `期間別支出一覧を出力` opens the existing print/PDF view with the same filtered rows and totals.
+- The individual `提出用資料＋原本` output was not changed.
+
+### Verification at completion
+
+- Local `npm test`: 100 passed, 0 failed.
+- Local `npm run build`: passed.
+- Local `git diff --check`: passed.
+- Pages workflow build/deploy: passed.
+- The deployed `phase2.js` contained the period-list module import and UI implementation.
+
+### Scope boundary
+
+- No Reader, OCR, Evidence/Blob storage, Knowledge, category behavior, history candidates, burden calculations, legacy-reason behavior, or individual submission-output behavior was changed.
