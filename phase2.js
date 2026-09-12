@@ -76,7 +76,7 @@ function installTwoModeLayout() {
   actions.append(chooser);
   const stage = document.createElement('section');
   stage.id = 'captureStage'; stage.className = 'capture-stage';
-  stage.innerHTML = '<section id="captureSelected" hidden><h3>選択した原本</h3><div id="capturePreview" class="preview"></div><p id="captureSelectionMeta" class="meta"></p><div class="capture-mode-actions"><button id="savePending" type="button" class="primary">未整理に保存</button><button id="organizePending" type="button">今すぐ整理</button><button id="cancelPending" type="button">選び直す</button></div></section><section id="captureSaved" hidden><p><b>未整理に保存しました</b></p><p id="captureSavedMeta" class="meta"></p><div class="capture-mode-actions"><button id="captureAgain" type="button" class="primary">続けて撮影</button><button id="organizeSaved" type="button">今すぐ整理</button><button id="openUnorganized" type="button">未整理BOXを見る</button></div></section>';
+  stage.innerHTML = '<section id="captureSelected" hidden><h3>選択した原本</h3><div id="capturePreview" class="preview"></div><p id="captureSelectionMeta" class="meta"></p><div class="capture-mode-actions"><button id="savePending" type="button" class="primary">未整理に保存</button><button id="readPending" type="button">今すぐ読み取る</button></div></section><section id="captureSaved" hidden><p><b>未整理に保存しました</b></p><p id="captureSavedMeta" class="meta"></p><div class="capture-mode-actions"><button id="captureAgain" type="button" class="primary">続けて撮影</button><button id="openUnorganized" type="button">未整理BOXを見る</button><button id="organizeSaved" type="button">今すぐ整理</button></div></section>';
   capture.append(stage);
   const workspace = $('.grid'); workspace.id = 'organizeWorkspace';
   const back = document.createElement('button');
@@ -98,6 +98,11 @@ function renderMode() {
   $('#captureChooser').hidden = screenMode !== 'capture' || Boolean(pendingCaptureFile) || Boolean(activeEvidence());
   $('#captureSelected').hidden = screenMode !== 'capture' || !pendingCaptureFile;
   $('#captureSaved').hidden = screenMode !== 'capture' || Boolean(pendingCaptureFile) || !activeEvidence();
+  const readButton = $('#ocr');
+  if (readButton) {
+    readButton.hidden = screenMode !== 'organize' || readerHasResult();
+    readButton.textContent = activeEvidence()?.ocr?.status === 'failed' ? 'もう一度読み取る' : '文字を読み取る';
+  }
 }
 
 function clearPendingCapture() {
@@ -121,7 +126,7 @@ function selectForCapture(file) {
   renderMode();
 }
 
-async function savePendingCapture({ organize = false } = {}) {
+async function savePendingCapture({ readNow = false } = {}) {
   if (!pendingCaptureFile) return;
   const file = pendingCaptureFile;
   await capture(file);
@@ -129,9 +134,13 @@ async function savePendingCapture({ organize = false } = {}) {
   const evidence = activeEvidence();
   if (!evidence) return;
   $('#captureSavedMeta').textContent = `${evidence.evidenceNumber} ／ ${evidence.fileName} ／ 未整理に保存済み`;
-  screenMode = organize ? 'organize' : 'capture';
+  screenMode = readNow ? 'organize' : 'capture';
   renderMode();
-  if (organize) $('#organizeWorkspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (!readNow) return;
+  $('#organizeWorkspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  const controller = await receiptItemsController();
+  if (!controller) { $('#progress').textContent = '商品明細の表示を準備できませんでした。再読み込みしてください。'; return; }
+  await readActiveEvidence();
 }
 
 function startOrganizing() {
@@ -264,8 +273,7 @@ $('#continueCurrent').addEventListener('click', () => $('#saveCamera').click());
 $('#captureCamera').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
 $('#captureFile').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
 $('#savePending').addEventListener('click', () => savePendingCapture());
-$('#organizePending').addEventListener('click', () => savePendingCapture({ organize: true }));
-$('#cancelPending').addEventListener('click', clearPendingCapture);
+$('#readPending').addEventListener('click', () => savePendingCapture({ readNow: true }));
 $('#captureAgain').addEventListener('click', () => $('#captureCamera').click());
 $('#organizeSaved').addEventListener('click', startOrganizing);
 $('#openUnorganized').addEventListener('click', () => $('#unorganizedSection').scrollIntoView({ behavior: 'smooth' }));

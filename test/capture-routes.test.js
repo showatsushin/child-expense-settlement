@@ -51,7 +51,8 @@ test('capture mode hides the organization workspace until the user starts organi
   assert.match(phase2, /id="captureCamera"/);
   assert.match(phase2, /id="captureFile"/);
   assert.match(phase2, /id="savePending"/);
-  assert.match(phase2, /id="organizePending"/);
+  assert.match(phase2, /id="readPending"/);
+  assert.doesNotMatch(phase2, /id="cancelPending"/);
   assert.match(phase2, /\.capture-mode #organizeWorkspace/);
   assert.match(phase2, /\.organize-mode\.reader-pending #organizeWorkspace .panel:nth-child\(2\)/);
 });
@@ -61,4 +62,10 @@ test('organization mode is a vertical workspace and shows fields only after Read
   assert.match(phase2, /function startOrganizing\(\)/);
   assert.match(phase2, /function readerHasResult\(\)/);
   assert.match(phase2, /screenMode === 'organize' && !readerHasResult\(\)/);
+});
+
+test('a selected original offers exactly save or read now, and read now uses the same evidence', () => {
+  assert.match(phase2, /未整理に保存<\/button><button id="readPending"[^>]*>今すぐ読み取る/);
+  assert.match(phase2, /savePendingCapture\(\{ readNow: true \}\)/);
+  assert.match(phase2, /await readActiveEvidence\(\)/);
 });
