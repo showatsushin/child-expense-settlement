@@ -1,7 +1,7 @@
 import { createExpenseRecord, CATEGORY_OPTIONS, SETTLEMENT_OPTIONS } from './src/models.js';
 import { createUserStorage } from './src/user-storage.js';
 import { requireAuthenticatedUser, logout } from './src/auth-gate.js';
-import { calculateOtherBurdenAmount, calculateOutstandingAmount, calculateSummary, toNonNegativeNumber } from './src/calculations.js';
+import { calculateOtherBurdenAmount, calculateOutstandingAmount, calculateSummary, nextEvidenceNumber, toNonNegativeNumber } from './src/calculations.js';
 import { validateFile, renderPreview } from './src/file-preview.js';
 import { readReceipt } from './src/services/receiptReaderProvider.js';
 import { extractPdfText } from './src/services/documentRecognition.js';
@@ -62,6 +62,87 @@ function installWorkspaceMarkup() {
 
 installWorkspaceMarkup();
 
+let screenMode = 'capture';
+let pendingCaptureFile = null;
+let pendingCapturePreviewUrl = null;
+
+function installTwoModeLayout() {
+  const capture = $('.capture');
+  const actions = capture.querySelector('.capture-actions');
+  for (const element of Array.from(actions.children)) element.hidden = true;
+  const chooser = document.createElement('div');
+  chooser.id = 'captureChooser'; chooser.className = 'capture-mode-actions';
+  chooser.innerHTML = '<label class="primary-choice">カメラで撮影<input id="captureCamera" type="file" accept="image/*" capture="environment"></label><label class="primary-choice">写真・PDFを選ぶ<input id="captureFile" type="file" accept="image/*,.pdf"></label>';
+  actions.append(chooser);
+  const stage = document.createElement('section');
+  stage.id = 'captureStage'; stage.className = 'capture-stage';
+  stage.innerHTML = '<section id="captureSelected" hidden><h3>選択した原本</h3><div id="capturePreview" class="preview"></div><p id="captureSelectionMeta" class="meta"></p><div class="capture-mode-actions"><button id="savePending" type="button" class="primary">未整理に保存</button><button id="organizePending" type="button">今すぐ整理</button><button id="cancelPending" type="button">選び直す</button></div></section><section id="captureSaved" hidden><p><b>未整理に保存しました</b></p><p id="captureSavedMeta" class="meta"></p><div class="capture-mode-actions"><button id="captureAgain" type="button" class="primary">続けて撮影</button><button id="organizeSaved" type="button">今すぐ整理</button><button id="openUnorganized" type="button">未整理BOXを見る</button></div></section>';
+  capture.append(stage);
+  const workspace = $('.grid'); workspace.id = 'organizeWorkspace';
+  const back = document.createElement('button');
+  back.id = 'backToCapture'; back.type = 'button'; back.className = 'back-to-capture'; back.textContent = '撮影・保存へ戻る';
+  workspace.before(back);
+  const readerPending = document.createElement('p');
+  readerPending.id = 'readerPending'; readerPending.className = 'reader-pending';
+  readerPending.textContent = '原本を確認し、「文字を読み取る」を押すと基本情報と商品明細を表示します。';
+  $('#form').closest('.panel').before(readerPending);
+  document.head.insertAdjacentHTML('beforeend', '<style id="two-mode-style">.capture-mode-actions{display:flex;gap:10px;flex-wrap:wrap}.primary-choice{display:flex;align-items:center;justify-content:center;min-height:58px;padding:0 22px;border-radius:10px;background:#17455d;color:#fff;font-weight:700;cursor:pointer}.primary-choice input{position:absolute;width:1px;height:1px;opacity:0}.capture-stage{margin-top:16px}.capture-stage h3{margin:0 0 8px}.back-to-capture{margin-top:18px}.capture-mode #organizeWorkspace,.capture-mode #backToCapture{display:none}.capture-mode #unorganizedSection{display:block}.organize-mode .capture,.organize-mode #unorganizedSection,.organize-mode .summary,.organize-mode .grid + .table{display:none}.organize-mode #organizeWorkspace{display:block;max-width:900px;margin-left:auto;margin-right:auto}.organize-mode #organizeWorkspace .panel{border:0}.organize-mode #organizeWorkspace .panel:first-child{border-bottom:1px solid #cdd8dd}.organize-mode.reader-pending #organizeWorkspace .panel:nth-child(2){display:none}.organize-mode.reader-pending #readerPending{display:block}.organize-mode:not(.reader-pending) #readerPending{display:none}.organize-mode.reader-pending .ocrbox h3,.organize-mode.reader-pending .ocrbox textarea{display:none}@media(max-width:640px){.primary-choice{width:100%;min-height:58px}.capture-mode-actions button{width:100%;min-height:48px}}</style>');
+  document.head.insertAdjacentHTML('beforeend', '<style>.organize-mode #deferCurrent,.organize-mode #continueCurrent{display:none}</style>');
+}
+
+function readerHasResult() { return activeEvidence()?.ocr?.status === 'completed'; }
+function renderMode() {
+  document.body.classList.toggle('capture-mode', screenMode === 'capture');
+  document.body.classList.toggle('organize-mode', screenMode === 'organize');
+  document.body.classList.toggle('reader-pending', screenMode === 'organize' && !readerHasResult());
+  $('#captureChooser').hidden = screenMode !== 'capture' || Boolean(pendingCaptureFile) || Boolean(activeEvidence());
+  $('#captureSelected').hidden = screenMode !== 'capture' || !pendingCaptureFile;
+  $('#captureSaved').hidden = screenMode !== 'capture' || Boolean(pendingCaptureFile) || !activeEvidence();
+}
+
+function clearPendingCapture() {
+  pendingCaptureFile = null;
+  if (pendingCapturePreviewUrl) URL.revokeObjectURL(pendingCapturePreviewUrl);
+  pendingCapturePreviewUrl = null;
+  $('#capturePreview').replaceChildren();
+  $('#captureSelectionMeta').textContent = '';
+  renderMode();
+}
+
+function selectForCapture(file) {
+  if (!file) return;
+  const error = validateFile(file);
+  if (error) { $('#captureMessage').textContent = error; return; }
+  clearPendingCapture();
+  pendingCaptureFile = file;
+  pendingCapturePreviewUrl = renderPreview($('#capturePreview'), file, file.name);
+  $('#captureSelectionMeta').textContent = `${nextEvidenceNumber(evidences)}（保存時に確定） ／ ${file.name} ／ 保存前`;
+  $('#captureMessage').textContent = '原本を確認して、保存方法を選んでください。';
+  renderMode();
+}
+
+async function savePendingCapture({ organize = false } = {}) {
+  if (!pendingCaptureFile) return;
+  const file = pendingCaptureFile;
+  await capture(file);
+  clearPendingCapture();
+  const evidence = activeEvidence();
+  if (!evidence) return;
+  $('#captureSavedMeta').textContent = `${evidence.evidenceNumber} ／ ${evidence.fileName} ／ 未整理に保存済み`;
+  screenMode = organize ? 'organize' : 'capture';
+  renderMode();
+  if (organize) $('#organizeWorkspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+function startOrganizing() {
+  if (!activeEvidence()) return;
+  screenMode = 'organize';
+  renderMode();
+  $('#organizeWorkspace').scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+installTwoModeLayout();
+
 function persist() { storage.saveMigratedState({ records, evidences, children }); storage.saveKnowledgeHistory(history); }
 function readerState(evidence) {
   if (!evidence) return { label: '原本未選択', className: '' };
@@ -117,7 +198,7 @@ function renderFilters() { const current = filterEvidence(); const filters = [['
 function sortedEvidence() { const direction = $('#evidenceOrder').value === 'old' ? 1 : -1; const current = filterEvidence(); return evidences.filter((evidence) => current === 'all' || (current === 'unorganized' ? evidence.status !== 'attached' : evidence.status === current)).sort((left, right) => direction * String(left.createdAt).localeCompare(String(right.createdAt))); }
 function renderUnorganized() { renderFilters(); const items = sortedEvidence(); $('#unorganizedList').innerHTML = items.length ? items.map((evidence) => `<article class="ecard"><b>${esc(evidence.evidenceNumber)}</b> <span class="badge">${evidenceLabel(evidence.status)}</span><p>${esc(evidence.fileName)}</p><p class="hint">追加: ${new Date(evidence.createdAt).toLocaleString('ja-JP')}<br>OCR: ${esc(evidence.ocr?.status || 'not_started')}</p><button data-organize="${esc(evidence.id)}">${evidence.status === 'attached' ? '原本を開く' : 'この証拠を整理する'}</button>${evidence.status !== 'attached' ? ` <button class="warn" data-discard="${esc(evidence.id)}">削除</button>` : ''}</article>`).join('') : '<p class="hint">該当する原本はありません。</p>'; }
 function renderRecords() { const emap = evidenceMap(); $('#rows').innerHTML = filteredRecords().map((record) => `<tr><td>${(record.evidenceIds || []).map((id) => esc(emap.get(id)?.evidenceNumber || '—')).join(' / ')}</td><td>${esc(record.paidDate)}</td><td>${esc(f(record.vendor))}</td><td class="right">${yen(f(record.amount))}</td><td>${esc(f(record.settlementStatus))}</td><td><button data-edit="${esc(record.id)}">編集</button><button class="warn" data-delete="${esc(record.id)}">削除</button></td></tr>`).join('') || '<tr><td colspan="6">登録済み明細はありません。</td></tr>'; }
-function render() { renderSummary(); renderUnorganized(); renderRecords(); renderCurrentEvidence(); }
+function render() { renderSummary(); renderUnorganized(); renderRecords(); renderCurrentEvidence(); renderMode(); }
 function clearPreview() { if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null; $('#preview').textContent = '未整理から原本を開くか、上の撮影ボタンで保存してください。'; }
 function resetForm() { activeEvidenceId = null; activeFile = null; activeOcr = null; editingRecordId = null; sources = {}; merchantCandidates = []; readerHeaders = {}; $('#form').reset(); $('#form').selfRate.value = 50; $('#form').otherRate.value = 50; $('#form').already.value = 0; $('#form').payer.value = '自分'; $('#formtitle').textContent = '後から整理'; $('#raw').value = ''; $('#corrected').value = ''; $('#filemeta').textContent = '証拠番号：未選択'; $('#filemsg').textContent = ''; $('#msg').textContent = ''; $('#candidates').classList.add('hide'); $('#ocr').disabled = true; window.receiptItemsController?.reset(); clearPreview(); calc(); }
 async function capture(file, { readNow = false } = {}) { if (!file) return; const error = validateFile(file); if (error) { $('#captureMessage').textContent = error; return; } $('#captureMessage').textContent = '原本を未整理へ保存中…'; try { const evidence = await saveUnorganizedEvidence({ file, evidences, saveFile }); evidences.push(evidence); persist(); activeEvidenceId = evidence.id; activeFile = file; activeOcr = evidence.ocr; if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = renderPreview($('#preview'), file, evidence.fileName); $('#filemeta').textContent = `証拠番号：${evidence.evidenceNumber} ／ ${evidence.fileName}`; $('#filemsg').textContent = readNow ? '未整理へ保存しました。これから文字を読み取ります。' : '未整理へ保存しました。画像を確認して、あとから整理できます。'; $('#ocr').disabled = false; render(); $('#captureMessage').innerHTML = readNow ? `未整理に保存しました（${esc(evidence.evidenceNumber)}）。文字を読み取っています…` : `未整理に保存しました（${esc(evidence.evidenceNumber)}）。 <button id="continueCapture" type="button">続けて撮影</button> <button id="readSaved" type="button">今すぐ読み取る</button> <button id="openSaved" type="button" data-id="${esc(evidence.id)}">未整理BOXを見る</button>`; if (readNow) await readActiveEvidence(); } catch (error) { $('#captureMessage').textContent = `原本の保存に失敗しました: ${error.message}`; } }
@@ -180,6 +261,18 @@ $('#deferCurrent').addEventListener('click', () => {
   renderCurrentEvidence();
 });
 $('#continueCurrent').addEventListener('click', () => $('#saveCamera').click());
+$('#captureCamera').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
+$('#captureFile').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
+$('#savePending').addEventListener('click', () => savePendingCapture());
+$('#organizePending').addEventListener('click', () => savePendingCapture({ organize: true }));
+$('#cancelPending').addEventListener('click', clearPendingCapture);
+$('#captureAgain').addEventListener('click', () => $('#captureCamera').click());
+$('#organizeSaved').addEventListener('click', startOrganizing);
+$('#openUnorganized').addEventListener('click', () => $('#unorganizedSection').scrollIntoView({ behavior: 'smooth' }));
+$('#backToCapture').addEventListener('click', () => { screenMode = 'capture'; renderMode(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+$('#unorganizedList').addEventListener('click', (event) => {
+  if (event.target.closest('[data-organize]')) { screenMode = 'organize'; renderMode(); }
+}, true);
 $('#ocr').addEventListener('click', async (event) => {
   if (window.receiptItemsController) return;
   event.stopImmediatePropagation();

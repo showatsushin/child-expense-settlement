@@ -45,3 +45,20 @@ test('Reader waits for the receipt item workspace instead of losing its result',
   assert.match(phase2, /商品明細の表示を準備中/);
   assert.match(phase2, /restoreWorkspaceItems/);
 });
+
+test('capture mode hides the organization workspace until the user starts organizing', () => {
+  assert.match(phase2, /let screenMode = 'capture'/);
+  assert.match(phase2, /id="captureCamera"/);
+  assert.match(phase2, /id="captureFile"/);
+  assert.match(phase2, /id="savePending"/);
+  assert.match(phase2, /id="organizePending"/);
+  assert.match(phase2, /\.capture-mode #organizeWorkspace/);
+  assert.match(phase2, /\.organize-mode\.reader-pending #organizeWorkspace .panel:nth-child\(2\)/);
+});
+
+test('organization mode is a vertical workspace and shows fields only after Reader results', () => {
+  assert.match(phase2, /workspace.id = 'organizeWorkspace'/);
+  assert.match(phase2, /function startOrganizing\(\)/);
+  assert.match(phase2, /function readerHasResult\(\)/);
+  assert.match(phase2, /screenMode === 'organize' && !readerHasResult\(\)/);
+});
