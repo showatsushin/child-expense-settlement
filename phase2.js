@@ -98,6 +98,14 @@ render = function renderWithSubmissionButtons(){
     editButton.after(submission);
   });
 };
+$('#candidates').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-all]');
+  if (!button) return;
+  event.stopImmediatePropagation();
+  const candidates = JSON.parse($('#candidates').dataset.json || '{}');
+  [['paidDate', candidates.dates?.[0]], ['amount', candidates.amounts?.[0]], ['vendor', candidates.vendors?.[0]], ['category', candidates.categories?.[0]]]
+    .forEach(([field, candidate]) => candidate && applyCandidate(field, candidate.value, candidate.source));
+}, true);
 function markLegacyHeaderFields(){
   const mark=(selector,label,hint)=>{const field=$(selector);const container=field?.closest('label');if(!container)return;container.classList.add('legacy-header-field');const textNode=[...container.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.trim());if(textNode)textNode.textContent=label;const note=document.createElement('span');note.className='hint';note.textContent=hint;container.append(note);};
   mark('#category','\u65e7\u4f1a\u8a08\u8cbb\u76ee\uff08\u65e2\u5b58\u53f0\u5e33\u4e92\u63db\uff09','\u65b0\u898f\u767b\u9332\u306e\u7a2e\u5225\u306f\u3001\u8cfc\u5165\u54c1\u660e\u7d30\u3054\u3068\u306b\u78ba\u8a8d\u3057\u307e\u3059\u3002');

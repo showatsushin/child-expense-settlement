@@ -9,6 +9,14 @@ test('OCR completion sends candidates to the ReceiptItem controller and removes 
   assert.equal(phase2.includes("['reason','理由',c.reasons]"), false);
 });
 
+test('bulk candidate application never overwrites the legacy reason field', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const start = phase2.indexOf("$('#candidates').addEventListener('click', (event) =>");
+  const handler = phase2.slice(start, phase2.indexOf('function markLegacyHeaderFields', start));
+  assert.match(handler, /candidates\.categories/);
+  assert.doesNotMatch(handler, /reason|candidates\.reasons/);
+});
+
 test('new records default the other burden rate to 100 and legacy reasons support candidates plus free text', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   assert.match(phase2, /const LEGACY_REASON_OPTIONS = \[[^\]]{100,}\]/);
