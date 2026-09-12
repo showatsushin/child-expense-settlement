@@ -50,6 +50,16 @@ OCR・AI・クラウド同期・認証・Google連携・Excel/Wordネイティ�
 Phase 2で追加したブラウザ用依存パッケージは `tesseract.js`、`@tesseract.js-data/jpn`、`@tesseract.js-data/eng`、`pdfjs-dist`、`xlsx`、`docx` です。`node_modules` を公開できるローカルHTTPサーバーから起動してください。例：`npx http-server -c-1`。
 ## Receipt items and evidence submission
 
+## 未整理BOXと後整理
+
+移動中・待ち時間などでは、カメラ撮影またはファイル選択で原本だけを保存できます。保存した原本は「未整理」に入り、この時点ではOCR/Reader APIを呼びません。保存後は「続けて撮影」で連続追加でき、時間がある時に未整理から1件ずつ開いて「文字を読み取る」を押します。
+
+Readerの店名・日付・総額・商品は候補です。自動確定はせず、購入店は候補選択後も自由に編集できます。整理中のヘッダー修正、商品、種別、Knowledge選択、購入目的は「途中保存」で原本に紐付けて復元されます。未添付の未整理原本は確認後にメタデータとIndexedDB上のBlobを削除できますが、登録済みまたは共有参照済みの原本は物理削除しません。
+
+商品種別は未選択から始まり、候補選択と自由入力の両方を許可します。購入目的Knowledgeも「選択してください」と「該当なし（手入力）」を分離しています。Knowledgeを選ぶと正本の `category` と `sourceExcerpt` を初期反映しますが、その後の種別・購入目的は自由に編集でき、Knowledge原文は保持されたまま「Knowledge原文に戻す」で復元できます。
+
+確定した店名・商品名・種別・Knowledge選択は、利用者ごとのブラウザ内履歴に `createdAt`、`updatedAt`、`source: user_confirmed_history` とともに保存します。次回は「過去の確定履歴」として候補表示するだけで、自動適用はしません。
+
 Each ExpenseRecord now acts as a backward-compatible receipt header and can contain multiple purchase items. Every item has a submission-only category, purpose/necessity text, and a user-selected submission state: `included`, `excluded`, or `review`.
 
 The printed receipt total, item total, and included-item claim total are separate values. A non-zero difference between the receipt total and item total is shown for review and is never corrected automatically.
