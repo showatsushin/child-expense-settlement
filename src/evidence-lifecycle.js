@@ -7,6 +7,12 @@ export async function saveDraftEvidence({ file, evidences, saveFile }) {
   return evidence;
 }
 
+export function markEvidenceUnorganized({ evidenceId, evidences }) {
+  const evidence = evidences.find((item) => item.id === evidenceId);
+  if (evidence?.status === 'draft') evidence.status = 'unorganized';
+  return evidence || null;
+}
+
 export function attachDraftEvidence({ evidenceIds, evidenceId, evidences, ocr }) {
   const evidence = evidences.find((item) => item.id === evidenceId);
   if (evidence) { evidence.status = 'attached'; if (ocr) evidence.ocr = ocr; }

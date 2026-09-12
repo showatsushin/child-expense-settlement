@@ -22,7 +22,7 @@ export function makeId(prefix) {
 }
 
 export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr, status = 'attached' } = {}) {
-  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
+  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','unorganized','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
 }
 
 function normalizePreprocessing(value) {

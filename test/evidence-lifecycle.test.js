@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createEvidenceDocument } from '../src/models.js';
-import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, latestDraftEvidence, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
+import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, latestDraftEvidence, markEvidenceUnorganized, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
 
 function file(name = 'receipt.jpg', size = 3) { return { name, type: 'image/jpeg', size }; }
 
@@ -15,6 +16,21 @@ test('a saved draft file can be read for OCR before registration', async () => {
   const files = new Map(); const input = file('camera.jpg', 0);
   const evidence = await saveDraftEvidence({ file: input, evidences: [], saveFile: async (id, blob) => files.set(id, blob) });
   assert.equal(files.get(evidence.id), input); assert.equal(evidence.status, 'draft');
+});
+
+test('saving a draft as unorganized keeps its original blob and does not invoke a reader', async () => {
+  const writes = []; const input = file('later.jpg');
+  const evidence = await saveDraftEvidence({ file: input, evidences: [], saveFile: async (id, blob) => writes.push([id, blob]) });
+  const saved = markEvidenceUnorganized({ evidenceId: evidence.id, evidences: [evidence] });
+  assert.equal(saved, evidence); assert.equal(evidence.status, 'unorganized'); assert.deepEqual(writes, [[evidence.id, input]]);
+
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const saveAction = phase2.slice(phase2.indexOf('function saveUnorganized'), phase2.indexOf('async function ocr'));
+  assert.match(phase2, /id="saveUnorganized"[^>]*>未整理に保存/);
+  assert.match(phase2, /id="ocr"[^>]*>文字を読み取る/);
+  assert.match(saveAction, /markEvidenceUnorganized/);
+  assert.doesNotMatch(saveAction, /readReceipt|recognizeImage|extractPdfText|applyReceiptReaderCandidates/);
+  assert.match(phase2.slice(phase2.indexOf('async function ocr')), /readReceipt/);
 });
 
 test('legacy evidence remains attached when no lifecycle status exists', () => {
