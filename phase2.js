@@ -2,6 +2,7 @@ import { createUserStorage } from './src/user-storage.js';
 import { requireAuthenticatedUser, logout } from './src/auth-gate.js';
 import { createEvidenceDocument, createExpenseRecord, CATEGORY_OPTIONS, SETTLEMENT_OPTIONS } from './src/models.js';
 import { calculateOtherBurdenAmount, calculateOutstandingAmount, calculateSummary, nextEvidenceNumber, toNonNegativeNumber } from './src/calculations.js';
+import { buildPeriodExpenseList, monthDateRange } from './src/period-expense-list.js';
 import { validateFile, renderPreview } from './src/file-preview.js';
 import { recognizeImage, extractPdfText } from './src/services/documentRecognition.js';
 import { readReceipt } from './src/services/receiptReaderProvider.js';
@@ -30,6 +31,23 @@ function updateCollapsibleSummary(details,count){details.dataset.count=String(co
 function makeCollapsibleSection(section,label,content){const details=document.createElement('details'),summary=document.createElement('summary');details.dataset.label=label;summary.className='tablehead';summary.append(document.createElement('h2'));details.append(summary,content);section.replaceChildren(details);details.addEventListener('toggle',()=>updateCollapsibleSummary(details,Number(details.dataset.count)||0));updateCollapsibleSummary(details,0);return details;}
 const evidenceSection=$('#evidences').closest('.table'),evidenceDetails=makeCollapsibleSection(evidenceSection,'証拠一覧',$('#evidences'));
 const unorganizedBox=document.createElement('section');unorganizedBox.id='unorganizedBox';unorganizedBox.className='table';unorganizedBox.innerHTML='<div id="unorganized" class="evidence-list"></div>';evidenceSection.after(unorganizedBox);const unorganizedDetails=makeCollapsibleSection(unorganizedBox,'未整理BOX',$('#unorganized'));
+
+const periodExpenseSection = document.createElement('section');
+periodExpenseSection.id = 'periodExpenseSection';
+periodExpenseSection.className = 'table';
+periodExpenseSection.innerHTML = `<div class="tablehead"><h2>\u671f\u9593\u5225\u652f\u51fa\u4e00\u89a7</h2><span><button type="button" data-period-preset="current">\u4eca\u6708</button> <button type="button" data-period-preset="previous">\u5148\u6708</button> <button type="button" data-period-preset="all">\u5168\u671f\u9593</button></span></div><div style="padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:end"><label style="font-weight:700;font-size:13px">\u958b\u59cb\u65e5<input id="periodExpenseStart" type="date"></label><label style="font-weight:700;font-size:13px">\u7d42\u4e86\u65e5<input id="periodExpenseEnd" type="date"></label><button id="periodExpenseOutput" type="button" class="primary">\u671f\u9593\u5225\u652f\u51fa\u4e00\u89a7\u3092\u51fa\u529b</button></div><div id="periodExpenseTotals" style="padding:0 14px 14px;font-weight:700"></div><div class="tablewrap"><table><thead><tr><th>\u8a3c\u62e0\u756a\u53f7</th><th>\u652f\u6255\u65e5</th><th>\u652f\u6255\u5148</th><th>\u8cbb\u76ee</th><th>\u65e7\u652f\u51fa\u7406\u7531</th><th class="right">\u30ec\u30b7\u30fc\u30c8\u7dcf\u984d</th><th class="right">\u63d0\u51fa\u5bfe\u8c61\u984d</th><th class="right">\u76f8\u624b\u8ca0\u62c5\u7387</th><th class="right">\u76f8\u624b\u8ca0\u62c5\u984d</th></tr></thead><tbody id="periodExpenseRows"></tbody></table></div>`;
+$('#rows').closest('.table').after(periodExpenseSection);
+
+const escapePeriodExpenseHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+function periodExpenseResult(){return buildPeriodExpenseList(records,{start:$('#periodExpenseStart').value,end:$('#periodExpenseEnd').value});}
+function periodExpenseLabel(){const start=$('#periodExpenseStart').value,end=$('#periodExpenseEnd').value;if(!start&&!end)return '\u5168\u671f\u9593';return `${start||'\u958b\u59cb\u65e5\u672a\u6307\u5b9a'} \u301c ${end||'\u7d42\u4e86\u65e5\u672a\u6307\u5b9a'}`;}
+function evidenceNumbersForPeriodExpense(record){const evidenceById=emap();return (record.evidenceIds||[]).map((id)=>evidenceById.get(id)?.evidenceNumber||'\u2014').join(' / ')||'\u2014';}
+function renderPeriodExpenseList(){const result=periodExpenseResult();$('#periodExpenseRows').innerHTML=result.rows.map((row)=>`<tr><td>${escapePeriodExpenseHtml(evidenceNumbersForPeriodExpense(row.record))}</td><td>${escapePeriodExpenseHtml(row.paidDate)}</td><td>${escapePeriodExpenseHtml(row.vendor)}</td><td>${escapePeriodExpenseHtml(row.category)}</td><td>${escapePeriodExpenseHtml(row.legacyReason)}</td><td class="right">${yen(row.receiptTotal)}</td><td class="right">${yen(row.submissionTotal)}</td><td class="right">${row.otherBurdenRate}%</td><td class="right">${yen(row.otherBurdenAmount)}</td></tr>`).join('')||'<tr><td colspan="9">\u6307\u5b9a\u671f\u9593\u306e\u767b\u9332\u6e08\u307f\u660e\u7d30\u306f\u3042\u308a\u307e\u305b\u3093\u3002</td></tr>';$('#periodExpenseTotals').textContent=`${periodExpenseLabel()}\uff1a\u671f\u9593\u5185\u7dcf\u984d ${yen(result.receiptTotal)}\u3000\u63d0\u51fa\u5bfe\u8c61\u984d\u5408\u8a08 ${yen(result.submissionTotal)}\u3000\u76f8\u624b\u8ca0\u62c5\u984d\u5408\u8a08 ${yen(result.otherBurdenAmount)}`;}
+function printPeriodExpenseList(){const result=periodExpenseResult();$('#printcontent').innerHTML=`<h1>\u671f\u9593\u5225\u652f\u51fa\u4e00\u89a7</h1><p>\u5bfe\u8c61\u671f\u9593\uff1a${escapePeriodExpenseHtml(periodExpenseLabel())}</p><table><thead><tr><th>\u8a3c\u62e0\u756a\u53f7</th><th>\u652f\u6255\u65e5</th><th>\u652f\u6255\u5148</th><th>\u8cbb\u76ee</th><th>\u65e7\u652f\u51fa\u7406\u7531</th><th>\u30ec\u30b7\u30fc\u30c8\u7dcf\u984d</th><th>\u63d0\u51fa\u5bfe\u8c61\u984d</th><th>\u76f8\u624b\u8ca0\u62c5\u7387</th><th>\u76f8\u624b\u8ca0\u62c5\u984d</th></tr></thead><tbody>${result.rows.map((row)=>`<tr><td>${escapePeriodExpenseHtml(evidenceNumbersForPeriodExpense(row.record))}</td><td>${escapePeriodExpenseHtml(row.paidDate)}</td><td>${escapePeriodExpenseHtml(row.vendor)}</td><td>${escapePeriodExpenseHtml(row.category)}</td><td>${escapePeriodExpenseHtml(row.legacyReason)}</td><td class="right">${yen(row.receiptTotal)}</td><td class="right">${yen(row.submissionTotal)}</td><td class="right">${row.otherBurdenRate}%</td><td class="right">${yen(row.otherBurdenAmount)}</td></tr>`).join('')||'<tr><td colspan="9">\u6307\u5b9a\u671f\u9593\u306e\u767b\u9332\u6e08\u307f\u660e\u7d30\u306f\u3042\u308a\u307e\u305b\u3093\u3002</td></tr>'}</tbody></table><p><strong>\u671f\u9593\u5185\u7dcf\u984d ${yen(result.receiptTotal)}\u3000\u63d0\u51fa\u5bfe\u8c61\u984d\u5408\u8a08 ${yen(result.submissionTotal)}\u3000\u76f8\u624b\u8ca0\u62c5\u984d\u5408\u8a08 ${yen(result.otherBurdenAmount)}</strong></p>`;$('#printview').classList.remove('hide');}
+function setPeriodExpensePreset(preset){const range=preset==='all'?{start:'',end:''}:monthDateRange(new Date(),preset==='previous'?-1:0);$('#periodExpenseStart').value=range.start;$('#periodExpenseEnd').value=range.end;renderPeriodExpenseList();}
+periodExpenseSection.addEventListener('input',(event)=>{if(event.target.matches('#periodExpenseStart,#periodExpenseEnd'))renderPeriodExpenseList();});
+periodExpenseSection.addEventListener('click',(event)=>{const preset=event.target.closest('[data-period-preset]');if(preset){setPeriodExpensePreset(preset.dataset.periodPreset);return;}if(event.target.closest('#periodExpenseOutput'))printPeriodExpenseList();});
+setPeriodExpensePreset('current');
 
 function persist(){ storage.saveMigratedState({records,evidences,children}); }
 function setup(){ const child=$('#child'),cat=$('#category'),set=$('#settlement'),filter=$('#filter'); child.innerHTML='<option value="">選択してください</option>'+children.map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); cat.innerHTML='<option value="">選択してください</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); set.innerHTML=SETTLEMENT_OPTIONS.map(x=>`<option>${x}</option>`).join(''); filter.innerHTML='<option value="">すべての費目</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); }
@@ -97,6 +115,11 @@ render = function renderWithSubmissionButtons(){
     submission.dataset.submissionRecord = receiptId;
     editButton.after(submission);
   });
+};
+const renderWithSubmissionButtons = render;
+render = function renderWithPeriodExpenseList(){
+  renderWithSubmissionButtons();
+  renderPeriodExpenseList();
 };
 $('#candidates').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-all]');
