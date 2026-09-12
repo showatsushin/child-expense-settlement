@@ -46,7 +46,7 @@ test('Reader waits for the receipt item workspace instead of losing its result',
   assert.match(phase2, /restoreWorkspaceItems/);
 });
 
-test('capture mode hides the organization workspace until the user starts organizing', () => {
+test('capture mode keeps the saved original visible while hiding the organization form', () => {
   assert.match(phase2, /let screenMode = 'capture'/);
   assert.match(phase2, /id="captureCamera"/);
   assert.match(phase2, /id="captureFile"/);
@@ -54,7 +54,18 @@ test('capture mode hides the organization workspace until the user starts organi
   assert.match(phase2, /id="readPending"/);
   assert.doesNotMatch(phase2, /id="cancelPending"/);
   assert.match(phase2, /\.capture-mode #organizeWorkspace/);
-  assert.match(phase2, /\.organize-mode\.reader-pending #organizeWorkspace .panel:nth-child\(2\)/);
+  assert.match(phase2, /id = 'currentEvidenceWorkspace'/);
+  assert.match(phase2, /id = 'organizeFormWorkspace'/);
+  assert.match(phase2, /\.capture-mode #organizeFormWorkspace/);
+  assert.match(phase2, /\.organize-mode\.reader-pending #organizeFormWorkspace/);
+});
+
+test('opening saved evidence recalculates visibility after restoring its OCR state', () => {
+  const openEvidence = phase2.slice(phase2.indexOf('async function openEvidence'), phase2.indexOf('function headersSnapshot'));
+  assert.ok(openEvidence.indexOf("activeEvidenceId = evidence.id") < openEvidence.indexOf("window.receiptItemsController?.setItems(organizer.items || [])"));
+  assert.ok(openEvidence.indexOf("window.receiptItemsController?.setItems(organizer.items || [])") < openEvidence.indexOf("if (readerHasResult()) screenMode = 'organize'; renderMode();"));
+  assert.match(phase2, /#currentEvidenceWorkspace'\)\.hidden = screenMode === 'capture' && !activeEvidence\(\)/);
+  assert.match(phase2, /\.organize-mode\.reader-pending #organizeFormWorkspace/);
 });
 
 test('organization mode is a vertical workspace and shows fields only after Reader results', () => {
