@@ -74,6 +74,18 @@ test('organizing an unorganized evidence reloads its existing preview without ch
   assert.match(phase2.slice(phase2.indexOf('async function ocr')), /readReceipt/);
 });
 
+test('organizing calls the existing preview renderer with the same evidence ID and saved blob', async () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const source = phase2.slice(phase2.indexOf('async function organizeUnorganizedEvidence'), phase2.indexOf('async function ocr'));
+  const evidence = { id: 'same-evidence', status: 'unorganized', evidenceNumber: 'E-001', fileName: 'saved.jpg', ocr: { status: 'not_started' } };
+  const blob = { name: 'saved.jpg', type: 'image/jpeg' }; const calls = { getFile: [], preview: [], reset: 0, scrolled: 0 };
+  const nodes = { '#filemsg': {}, '#filemeta': {}, '#cancelEvidence': { classList: { add() {} } }, '#saveUnorganized': {}, '#preview': { scrollIntoView() { calls.scrolled += 1; } } };
+  const organize = new Function('emap', 'getFile', '$', 'reset', 'URL', 'renderPreview', 'previewUrl', 'pendingEvidenceId', 'pendingFile', 'pendingOcr', `${source}; return organizeUnorganizedEvidence;`)(
+    () => new Map([[evidence.id, evidence]]), async (id) => { calls.getFile.push(id); return blob; }, (selector) => nodes[selector], async () => { calls.reset += 1; }, { revokeObjectURL() {} }, (container, file, label) => { calls.preview.push([container, file, label]); return 'blob:preview'; }, null, null, null, null);
+  await organize(evidence.id);
+  assert.deepEqual(calls.getFile, [evidence.id]); assert.equal(calls.reset, 1); assert.deepEqual(calls.preview, [[nodes['#preview'], blob, evidence.fileName]]); assert.equal(calls.scrolled, 1);
+});
+
 test('evidence list and unorganized box use closed native details with derived counts only', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   const collapsible = phase2.slice(phase2.indexOf('function updateCollapsibleSummary'), phase2.indexOf('function persist'));
