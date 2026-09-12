@@ -24,7 +24,6 @@ export function clearSelectedKnowledge(item = {}) {
     knowledgeKey: null,
     knowledgeSource: null,
     knowledgeVersion: null,
-    knowledgeSelectionState: 'unselected',
     purposeSource: item.purpose?.value ? 'manual' : item.purposeSource || 'manual',
     categorySource: item.category ? 'manual' : item.categorySource || 'manual',
   };
@@ -46,10 +45,8 @@ export function applySelectedKnowledge(item = {}, knowledgeKey = '') {
     purposeSource: 'knowledge',
     originalKnowledgePurpose: knowledge.sourceExcerpt,
     knowledgeKey: knowledge.key,
-    knowledgeSelectionState: 'selected',
     knowledgeSource: knowledge.source,
     knowledgeVersion: knowledge.version,
-    sourceExcerpt: knowledge.sourceExcerpt,
     basis: [
       knowledge.sourceDocument,
       knowledge.sourceSection,

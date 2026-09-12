@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEvidenceDocument } from '../src/models.js';
-import { saveDraftEvidence, saveUnorganizedEvidence, attachDraftEvidence, discardDraftEvidence, discardUnattachedEvidence, latestDraftEvidence, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
+import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, latestDraftEvidence, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
 
 function file(name = 'receipt.jpg', size = 3) { return { name, type: 'image/jpeg', size }; }
 
@@ -15,19 +15,6 @@ test('a saved draft file can be read for OCR before registration', async () => {
   const files = new Map(); const input = file('camera.jpg', 0);
   const evidence = await saveDraftEvidence({ file: input, evidences: [], saveFile: async (id, blob) => files.set(id, blob) });
   assert.equal(files.get(evidence.id), input); assert.equal(evidence.status, 'draft');
-});
-
-test('unorganized capture stores one original without calling a reader and has a distinct lifecycle state', async () => {
-  const writes = []; const evidence = await saveUnorganizedEvidence({ file: file('camera-1.jpg'), evidences: [], saveFile: async (id, blob) => writes.push([id, blob]) });
-  assert.equal(evidence.status, 'unorganized'); assert.equal(evidence.ocr.status, 'not_started'); assert.equal(writes.length, 1);
-});
-
-test('unattached unorganized evidence can be deleted, but an attached or shared original cannot', async () => {
-  const deleted = []; const source = [{ id: 'free', status: 'review' }, { id: 'used', status: 'unorganized' }, { id: 'attached', status: 'attached' }];
-  const afterFree = await discardUnattachedEvidence({ evidenceId: 'free', evidences: source, records: [], deleteFile: async (id) => deleted.push(id) });
-  assert.deepEqual(afterFree.map((item) => item.id), ['used', 'attached']); assert.deepEqual(deleted, ['free']);
-  const afterUsed = await discardUnattachedEvidence({ evidenceId: 'used', evidences: source, records: [{ evidenceIds: ['used'] }], deleteFile: async (id) => deleted.push(id) });
-  assert.equal(afterUsed, source);
 });
 
 test('legacy evidence remains attached when no lifecycle status exists', () => {

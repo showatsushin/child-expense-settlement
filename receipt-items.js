@@ -6,7 +6,6 @@ import {
   knowledgeCandidatesForProduct,
   selectedKnowledge,
 } from './src/services/purchasePurposeSelection.js';
-import { historySuggestions, normalizeKnowledgeHistory } from './src/user-knowledge-history.js';
 
 const $ = (selector) => document.querySelector(selector);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -18,7 +17,6 @@ let items = [];
 let cachedOcrCandidates = [];
 let ocrQuality = null;
 let host;
-let confirmationHistory = normalizeKnowledgeHistory();
 
 function totals() {
   const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -34,16 +32,12 @@ function categoryOptions() {
 
 function knowledgeControl(item) {
   const selected = selectedKnowledge(item);
-  const historical = historySuggestions(confirmationHistory, 'knowledgeSelectionHistory', item.productName)
-    .map((entry) => entry.confirmed);
-  const matches = knowledgeCandidatesForProduct(item.productName)
-    .sort((left, right) => (historical.indexOf(left.key) < 0 ? 999 : historical.indexOf(left.key)) - (historical.indexOf(right.key) < 0 ? 999 : historical.indexOf(right.key)));
+  const matches = knowledgeCandidatesForProduct(item.productName);
   const candidates = selected && !matches.some((entry) => entry.key === selected.key)
     ? [selected, ...matches]
     : matches;
   const options = [
-    '<option value=""' + (item.knowledgeSelectionState !== 'manual' && !item.knowledgeKey ? ' selected' : '') + '>選択してください</option>',
-    '<option value="__manual__"' + (item.knowledgeSelectionState === 'manual' ? ' selected' : '') + '>該当なし（手入力）</option>',
+    '<option value="">該当なし（手入力）</option>',
     ...candidates.map((entry) => '<option value="' + esc(entry.key) + '"'
       + (item.knowledgeKey === entry.key ? ' selected' : '') + '>'
       + esc(entry.category) + '</option>'),
@@ -56,19 +50,11 @@ function knowledgeControl(item) {
       + '<dt>source</dt><dd>' + esc(selected.source) + '</dd>'
       + '<dt>version</dt><dd>' + esc(selected.version) + '</dd>'
       + '</dl><pre>' + esc(selected.sourceExcerpt) + '</pre></details>'
-    : '<p class="help">未選択はまだ判断していない状態です。「該当なし（手入力）」を選んだ場合も、種別と購入目的・必要性を自由に入力して登録できます。</p>';
+    : '<p class="help">該当なしを選んだ場合も、種別と購入目的・必要性を自由に入力して登録できます。</p>';
 
   return '<section class="item-knowledge"><label>購入目的Knowledge'
     + '<select data-knowledge-key>' + options + '</select></label>'
     + source + '</section>';
-}
-
-function historicalChoices(item) {
-  const products = historySuggestions(confirmationHistory, 'productCorrections', item.productName);
-  const categories = historySuggestions(confirmationHistory, 'categoryHistory', item.productName);
-  const product = products.length ? '<p class="history-choice">過去の確定履歴（商品名）: ' + products.map((entry) => '<button type="button" data-action="use-product-history" data-value="' + esc(entry.confirmed) + '">' + esc(entry.confirmed) + '</button>').join(' ') + '</p>' : '';
-  const category = categories.length ? '<p class="history-choice">過去の確定履歴（種別）: ' + categories.map((entry) => '<button type="button" data-action="use-category-history" data-value="' + esc(entry.confirmed) + '">' + esc(entry.confirmed) + '</button>').join(' ') + '</p>' : '';
-  return product + category;
 }
 
 function row(item, index) {
@@ -79,7 +65,7 @@ function row(item, index) {
   ].map(([value, label]) => '<option value="' + value + '"'
     + (item.submissionStatus === value ? ' selected' : '') + '>'
     + label + '</option>').join('');
-  const restore = item.sourceExcerpt || item.originalKnowledgePurpose
+  const restore = item.originalKnowledgePurpose
     ? '<button type="button" class="secondary restore-knowledge" data-action="restore-knowledge">Knowledge原文に戻す</button>'
     : '';
 
@@ -94,9 +80,8 @@ function row(item, index) {
     + '<label>金額<input data-field="amount" type="number" min="0" step="0.01" value="' + esc(item.amount) + '"></label>'
     + '</div>'
     + knowledgeControl(item)
-    + historicalChoices(item)
     + '<div class="receipt-item-grid item-edit-fields">'
-    + '<label>種別<input data-field="category" list="receiptItemCategories" placeholder="候補から選択または自由入力" aria-label="種別（未選択）" value="' + esc(item.category) + '"></label>'
+    + '<label>種別<input data-field="category" list="receiptItemCategories" placeholder="候補から選択または自由入力" value="' + esc(item.category) + '" required></label>'
     + '<label class="full purpose-field">購入目的・必要性'
     + '<textarea data-field="purpose" data-autogrow rows="8">' + esc(item.purpose?.value || '') + '</textarea>'
     + restore + '</label>'
@@ -154,7 +139,7 @@ function update(id, field, value, renderAfter = true) {
     item.purpose = { value, source: 'manual', confidence: null };
     item.purposeSource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else if (field === 'category') {
-    item.category = String(value || '').trim();
+    item.category = String(value || '').trim() || 'その他';
     item.categorySource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else {
     item[field] = value;
@@ -168,17 +153,7 @@ function selectKnowledge(id, key) {
   const index = items.findIndex((item) => item.id === id);
   if (index < 0) return;
   const current = items[index];
-  if (key === '__manual__') {
-    items[index] = { ...current, knowledgeKey: null, knowledgeSource: null, knowledgeVersion: null, knowledgeSelectionState: 'manual' };
-    render();
-    return;
-  }
-  if (!key) {
-    items[index] = { ...current, knowledgeKey: null, knowledgeSource: null, knowledgeVersion: null, knowledgeSelectionState: 'unselected' };
-    render();
-    return;
-  }
-  if (hasManualKnowledgeFields(current)) {
+  if (key && hasManualKnowledgeFields(current)) {
     const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u3092\u3001\u65b0\u3057\u304f\u9078\u629e\u3057\u305fKnowledge\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
     if (!confirmed) { render(); return; }
   }
@@ -188,11 +163,10 @@ function selectKnowledge(id, key) {
 
 function restoreKnowledgePurpose(id) {
   const item = items.find((candidate) => candidate.id === id);
-  const excerpt = item?.sourceExcerpt || item?.originalKnowledgePurpose;
-  if (!excerpt) return;
+  if (!item?.originalKnowledgePurpose) return;
   const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u30fb\u5fc5\u8981\u6027\u3092Knowledge\u306e\u5143\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
   if (!confirmed) return;
-  item.purpose = { value: excerpt, source: 'knowledge', confidence: 1 };
+  item.purpose = { value: item.originalKnowledgePurpose, source: 'knowledge', confidence: 1 };
   item.purposeSource = 'knowledge';
   item.source = 'manual';
   item.confidence = null;
@@ -257,10 +231,6 @@ function handleAction(button) {
     render();
   } else if (action === 'restore-knowledge') {
     restoreKnowledgePurpose(card.dataset.id);
-  } else if (action === 'use-product-history') {
-    update(card.dataset.id, 'productName', button.dataset.value);
-  } else if (action === 'use-category-history') {
-    update(card.dataset.id, 'category', button.dataset.value);
   }
 }
 
@@ -276,11 +246,10 @@ function applyReceiptReaderCandidates(reader) {
       quantity: item.quantity == null ? 1 : item.quantity,
       unitPrice: item.unitPrice == null ? item.amount : item.unitPrice,
       amount: item.amount,
-      category: '',
+      category: 'その他',
       categorySource: 'manual',
       purpose: { value: '', source: 'ocr', confidence: 0 },
       purposeSource: 'manual',
-      knowledgeSelectionState: 'unselected',
       submissionStatus: 'review',
       source: 'ocr',
       confidence: item.confidence,
@@ -316,8 +285,7 @@ function applyReceiptReaderCandidates(reader) {
 function install() {
   if (typeof document === 'undefined') return;
   const form = $('#form');
-  if (!form) return false;
-  if (document.querySelector('#receiptItems')) return true;
+  if (!form) return;
   host = document.createElement('section');
   host.id = 'receiptItems';
   host.className = 'receipt-items full';
@@ -353,7 +321,6 @@ function install() {
         createReceiptItem({ ...item, lineOrder: index + 1 }));
       render();
     },
-    setHistory: (value) => { confirmationHistory = normalizeKnowledgeHistory(value); render(); },
     applyOcrCandidates,
     applyReceiptReaderCandidates,
     reset: () => {
@@ -363,20 +330,7 @@ function install() {
       render();
     },
   };
-  if (window.receiptApp?.getKnowledgeHistory) confirmationHistory = normalizeKnowledgeHistory(window.receiptApp.getKnowledgeHistory());
   render();
-  return true;
 }
 
-// phase2.js waits for authentication before it replaces the page with #form.
-// Module evaluation order is not a reliable readiness signal, so do not silently
-// abandon the controller when receipt-items.js runs first.
-function installWhenFormIsReady() {
-  if (typeof document === 'undefined') return;
-  if (install()) return;
-  const timer = setInterval(() => {
-    if (install()) clearInterval(timer);
-  }, 25);
-}
-
-installWhenFormIsReady();
+install();
