@@ -6,7 +6,9 @@ import {
   productHistoryCandidates,
   recordConfirmedHistory,
   vendorHistoryCandidates,
+  vendorHistoryCandidatesForQueries,
 } from '../src/confirmed-history.js';
+import { extractSuggestions } from '../src/ocr-extract.js';
 import { confirmedHistoryKeyForUser } from '../src/user-storage.js';
 
 test('registered human-confirmed values are stored separately and ranked as future candidates', () => {
@@ -51,4 +53,15 @@ test('normalized human-confirmed history ranks Reader spelling variants as expli
   assert.equal(productHistoryCandidates(history, readerProduct)[0].productName, '飲料水 500ml');
   assert.equal(readerVendor, 'サンプル 薬局');
   assert.equal(readerProduct, '飲料水500ML');
+});
+
+test('OCR vendor candidates supplement a non-matching Reader vendor without duplicate history entries', () => {
+  const vendor = '国立成育医療研究センター 5階売店';
+  const history = recordConfirmedHistory({}, { vendor, items: [], confirmedAt: '2026-09-12T12:00:00.000Z' });
+  const ocrVendorCandidates = extractSuggestions(`くれよん\n${vendor}`).vendors.map((candidate) => candidate.value);
+
+  assert.deepEqual(
+    vendorHistoryCandidatesForQueries(history, ['くれよん', ...ocrVendorCandidates, ...ocrVendorCandidates]).map((entry) => entry.value),
+    [vendor],
+  );
 });

@@ -86,10 +86,21 @@ function ranked(entries, value, field) {
 export const vendorHistoryCandidates = (history, vendor = '') =>
   ranked(normalizeConfirmedHistory(history).vendors, vendor, 'value');
 
+export function vendorHistoryCandidatesForQueries(history, queries = []) {
+  const seen = new Set();
+  return (Array.isArray(queries) ? queries : [queries])
+    .flatMap((query) => vendorHistoryCandidates(history, query))
+    .filter((entry) => {
+      const key = normalizeHistoryText(entry.value);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export const productHistoryCandidates = (history, productName = '') =>
   ranked(normalizeConfirmedHistory(history).items, productName, 'productName')
     .filter((entry, index, entries) => entries.findIndex((candidate) => normalizeHistoryText(candidate.productName) === normalizeHistoryText(entry.productName)) === index);
 
 export const itemHistoryCandidates = (history, productName = '') =>
   ranked(normalizeConfirmedHistory(history).items, productName, 'productName');
-
