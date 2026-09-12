@@ -6,6 +6,19 @@ import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, discardUn
 
 function file(name = 'receipt.jpg', size = 3) { return { name, type: 'image/jpeg', size }; }
 
+test('form controls do not mask the native reset method', () => {
+  const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
+  const formMarkup = phase2.match(/<form id="form">([\s\S]*?)<\/form>/)?.[0];
+  assert.ok(formMarkup, 'the rendered document must contain the expense form');
+  assert.doesNotMatch(
+    formMarkup,
+    /<(?:button|input|select|textarea|output)\b[^>]*\b(?:id|name)="reset"/i,
+    'a form control named or identified reset masks HTMLFormElement.reset() in the browser',
+  );
+  assert.match(phase2, /\$\('#form'\)\.reset\(\)/);
+  assert.match(phase2, /\$\('#resetForm'\)\.addEventListener\('click',\(\)=>reset\(\{discardDraft:true\}\)\)/);
+});
+
 test('selection immediately creates and stores draft evidence without date or amount', async () => {
   const writes = []; const input = file();
   const evidence = await saveDraftEvidence({ file: input, evidences: [], saveFile: async (id, blob) => writes.push([id, blob]) });
