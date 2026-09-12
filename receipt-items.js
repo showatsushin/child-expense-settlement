@@ -316,7 +316,8 @@ function applyReceiptReaderCandidates(reader) {
 function install() {
   if (typeof document === 'undefined') return;
   const form = $('#form');
-  if (!form) return;
+  if (!form) return false;
+  if (document.querySelector('#receiptItems')) return true;
   host = document.createElement('section');
   host.id = 'receiptItems';
   host.className = 'receipt-items full';
@@ -364,6 +365,18 @@ function install() {
   };
   if (window.receiptApp?.getKnowledgeHistory) confirmationHistory = normalizeKnowledgeHistory(window.receiptApp.getKnowledgeHistory());
   render();
+  return true;
 }
 
-install();
+// phase2.js waits for authentication before it replaces the page with #form.
+// Module evaluation order is not a reliable readiness signal, so do not silently
+// abandon the controller when receipt-items.js runs first.
+function installWhenFormIsReady() {
+  if (typeof document === 'undefined') return;
+  if (install()) return;
+  const timer = setInterval(() => {
+    if (install()) clearInterval(timer);
+  }, 25);
+}
+
+installWhenFormIsReady();
