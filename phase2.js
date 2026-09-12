@@ -194,6 +194,7 @@ const previewObserver = new MutationObserver(() => {
   if (!evidence) return;
   renderCurrentEvidence();
   restoreWorkspaceItems(evidence.organization?.items || []);
+  $('#currentEvidence').scrollIntoView({ block: 'start', behavior: 'smooth' });
 });
 previewObserver.observe($('#preview'), { childList: true });
 

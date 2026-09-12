@@ -37,6 +37,7 @@ test('the active evidence workspace stays visible, resumes after reload, and doe
   assert.match(phase2, /function prepareNewCapture\(\)/);
   assert.match(phase2, /#deferCurrent/);
   assert.match(phase2, /#continueCurrent/);
+  assert.match(phase2, /#currentEvidence'\)\.scrollIntoView/);
 });
 
 test('Reader waits for the receipt item workspace instead of losing its result', () => {
