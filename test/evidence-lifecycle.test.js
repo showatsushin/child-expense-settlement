@@ -63,14 +63,13 @@ test('unorganized box reuses the existing blob preview and has no Reader action'
 test('organizing an unorganized evidence reloads its existing preview without changing status or starting a Reader', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   const organize = phase2.slice(phase2.indexOf('async function organizeUnorganizedEvidence'), phase2.indexOf('async function ocr'));
-  const showEvidence = phase2.slice(phase2.indexOf('async function showEvidence'), phase2.indexOf('function xlsx'));
   assert.match(organize, /evidence\?\.status!==['"]unorganized['"]/);
-  assert.match(organize, /await reset\(\);await showEvidence\(evidenceId,\{forOrganization:true\}\)/);
+  assert.match(organize, /getFile\(evidenceId\)/);
+  assert.match(organize, /if\(!file\)\{\$\(['"]#filemsg['"]\)\.textContent/);
+  assert.match(organize, /await reset\(\);pendingEvidenceId=evidence\.id;pendingFile=file;pendingOcr=evidence\.ocr/);
+  assert.match(organize, /renderPreview\(\$\(['"]#preview['"]\),file,evidence\.fileName\)/);
   assert.match(organize, /scrollIntoView/);
   assert.doesNotMatch(organize, /saveFile|readReceipt|ocr\(|markEvidenceUnorganized|status\s*=/);
-  assert.match(showEvidence, /pendingEvidenceId=forOrganization\|\|e\.status===['"]draft['"]\?e\.id:null/);
-  assert.match(showEvidence, /getFile\(id\)/);
-  assert.match(showEvidence, /renderPreview\(\$\(['"]#preview['"]\),file,e\.fileName\)/);
   assert.match(phase2, /data-organize-unorganized/);
   assert.match(phase2.slice(phase2.indexOf('async function ocr')), /readReceipt/);
 });
