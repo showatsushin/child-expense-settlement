@@ -30,6 +30,9 @@ const activeEvidence = () => evidenceMap().get(activeEvidenceId) || null;
 document.body.innerHTML = `<style>
 :root{font-family:"Yu Gothic UI",system-ui,sans-serif;color:#18232d;background:#f2f5f6}body{margin:0}.top{padding:18px 3%;background:#fff;border-bottom:1px solid #ccd7dc;display:flex;justify-content:space-between;gap:12px;align-items:center}.top h1{font-size:21px;margin:0}.top p{margin:4px 0 0;color:#5a6870;font-size:13px}button{cursor:pointer;padding:8px 11px;border:1px solid #94a8b2;border-radius:7px;background:#fff;font:inherit}.primary{background:#17455d;border-color:#17455d;color:#fff}.warn{color:#9d302c}.page{max-width:1450px;margin:auto;padding:18px}.summary{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #cdd8dd;background:#fff}.summary div{padding:10px 13px;border-right:1px solid #dce4e7}.summary small{display:block;color:#60717a}.summary strong{font-size:18px}.capture,.grid,.table{margin-top:18px;background:#fff;border:1px solid #cdd8dd;padding:18px}.capture h2,.panel h2,.table h2{font-size:18px;margin:0 0 10px}.capture-actions{display:flex;gap:10px;flex-wrap:wrap}.capture-actions label{display:inline-flex;align-items:center;justify-content:center;min-height:50px;padding:0 18px;border-radius:8px;background:#17455d;color:#fff;font-weight:700;cursor:pointer}.capture-actions input{position:absolute;width:1px;height:1px;opacity:0}.capture-message{margin:10px 0 0;color:#17603e;font-weight:700}.grid{display:grid;grid-template-columns:.8fr 1.2fr;padding:0}.panel{padding:18px}.panel:first-child{border-right:1px solid #cdd8dd}.drop{display:block;padding:18px;border:1px dashed #7b98a6;text-align:center;background:#f7fafb}.drop input{display:none}.preview{height:310px;background:#edf1f2;margin-top:10px;display:flex;align-items:center;justify-content:center}.preview img,.preview iframe{width:100%;height:100%;object-fit:contain;border:0}.meta,.hint{font-size:12px;color:#5a6870}.ocrbox{margin-top:12px;border-top:1px solid #d9e1e5;padding-top:10px}.progress{font-size:12px;color:#17455d}.fields{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 14px}.fields label{font-weight:700;font-size:13px}.full{grid-column:1/-1}textarea,input,select{box-sizing:border-box;width:100%;padding:8px;border:1px solid #aebdc4;border-radius:5px;font:inherit}textarea{resize:vertical}.candidate-box{background:#edf5f7;border-left:4px solid #3d768d;padding:10px;margin-bottom:12px}.candidate{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #d1e0e5}.candidate:last-child{border:0}.message{min-height:20px;color:#17603e;font-weight:700}.status-actions{display:flex;gap:8px;flex-wrap:wrap}.tablehead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;white-space:nowrap}th,td{padding:8px;border-bottom:1px solid #dbe3e6;text-align:left;font-size:13px}th{background:#f5f8f9}.right{text-align:right}.evidence-list{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.ecard{border:1px solid #d2dde1;padding:12px;border-radius:8px}.badge{font-size:12px;background:#e4f0f3;border-radius:10px;padding:2px 6px}.filter-buttons{display:flex;gap:6px;flex-wrap:wrap}.filter-buttons button.active{background:#17455d;color:#fff}.print{position:fixed;inset:0;background:#fff;overflow:auto;padding:28px;z-index:5}.hide{display:none}@media(max-width:900px){.grid{grid-template-columns:1fr}.panel:first-child{border-right:0;border-bottom:1px solid #cdd8dd}.summary{grid-template-columns:repeat(3,1fr)}.evidence-list{grid-template-columns:repeat(2,1fr)}}@media(max-width:640px){.page{padding:12px}.summary{grid-template-columns:repeat(2,1fr)}.summary div:last-child{grid-column:span 2}.capture,.grid,.table{margin-top:12px}.capture-actions{position:sticky;bottom:8px;background:#fff;padding:8px}.capture-actions label,.capture-actions button{flex:1;min-height:50px}.fields{grid-template-columns:1fr}.full{grid-column:auto}.evidence-list{grid-template-columns:1fr}.tablewrap table,.tablewrap tbody,.tablewrap tr,.tablewrap td{display:block;width:100%;white-space:normal}.tablewrap thead{display:none}.tablewrap tr{margin:8px 0;border:1px solid #e3eaec;border-radius:10px;padding:5px 12px}.tablewrap td{display:flex;justify-content:space-between;gap:14px}.tablewrap td:last-child{justify-content:flex-start;flex-wrap:wrap}.tablewrap td:before{font-weight:700;color:#687a82}.tablewrap td:nth-child(1):before{content:'証拠'}.tablewrap td:nth-child(2):before{content:'日付'}.tablewrap td:nth-child(3):before{content:'店名'}.tablewrap td:nth-child(4):before{content:'金額'}.tablewrap td:nth-child(5):before{content:'状態'}.tablewrap td:nth-child(6):before{content:'操作'}}
 </style>
+<style>
+.page{display:flex;flex-direction:column}.summary{order:1}.capture{order:2}.grid{order:3}.grid + .table{order:5}#unorganizedSection{order:4}.current-evidence{margin-bottom:14px;padding:14px;border:1px solid #9dbbc7;border-radius:10px;background:#eef7f9}.current-evidence.empty{border-style:dashed;background:#f7fafb;color:#5a6870}.current-evidence-head{display:flex;justify-content:space-between;gap:10px;align-items:start}.current-evidence h3{margin:2px 0 0;font-size:17px}.current-evidence p{margin:4px 0}.current-evidence-state{font-weight:700;color:#17455d}.current-evidence-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.current-evidence-actions button{min-height:42px}.reader-state{display:inline-block;padding:3px 8px;border-radius:99px;background:#dceef3;color:#17455d;font-size:12px;font-weight:700}.reader-state.review{background:#fff0cc;color:#805700}.reader-state.failed{background:#fde8e8;color:#9d302c}@media(max-width:640px){.current-evidence-actions button{width:100%;min-height:48px}.current-evidence-head{display:block}.current-evidence-head .reader-state{margin-top:8px}}
+</style>
 <header class="top"><div><h1>子ども関連支出 清算整理</h1><p>証拠を先に保存し、時間があるときに整理します。</p></div><div><span id="user" class="hint"></span> <button id="logout">ログアウト</button> <button id="xlsx">Excel出力</button> <button id="docx">Word出力</button> <button id="print" class="primary">印刷用表示</button></div></header>
 <main class="page"><section id="summary" class="summary"></section>
 <section class="capture"><h2>撮影・保存</h2><p>使い方を選んでください。「未整理に保存」は原本だけを残して終了し、「今すぐ読み取る」は同じ原本を保存してからReaderを実行します。</p><div class="capture-actions"><label>未整理に保存<input id="saveCamera" type="file" accept="image/*" capture="environment"></label><label>今すぐ読み取る<input id="readCamera" type="file" accept="image/*" capture="environment"></label><label>ファイルを未整理に保存<input id="quickFile" type="file" accept="image/*,.pdf"></label><label>ファイルを今すぐ読み取る<input id="readFile" type="file" accept="image/*,.pdf"></label><button id="showUnorganized" type="button">未整理BOXを見る</button></div><p id="captureMessage" class="capture-message"></p></section>
@@ -38,7 +41,72 @@ document.body.innerHTML = `<style>
 <section class="panel"><h2 id="formtitle">後から整理</h2><div id="candidates" class="candidate-box hide"></div><form id="form"><div class="fields"><label>支払日<input name="paidDate" type="date"></label><label>レシート総額<input name="amount" type="number" min="0"></label><label class="full">購入店<input name="vendor" placeholder="候補から選んだ後も自由に編集できます"></label><label>対象児童<select name="childId" id="child"></select></label><label>会計費目<select name="category" id="category"></select></label><label>支払者<input name="payer" value="自分"></label><label>養育関連区分<select name="parenting"><option>要確認</option><option>対象</option><option>対象外</option></select></label><label>特別費区分<select name="special"><option>要確認</option><option>該当</option><option>非該当</option></select></label><label>自分負担率<input name="selfRate" type="number" value="50" min="0" max="100"></label><label>相手負担率<input name="otherRate" type="number" value="50" min="0" max="100"></label><label>既払い額<input name="already" type="number" value="0" min="0"></label><label>清算状態<select name="settlement" id="settlement"></select></label><label>相手負担想定額<output id="other">¥0</output></label><label>未清算額<output id="outstanding">¥0</output></label><label class="full">対象期間<input name="period"></label><label class="full">旧支出理由（既存台帳互換）<textarea name="reason" rows="2"></textarea></label><label class="full">備考<textarea name="notes" rows="2"></textarea></label></div><p id="duplicate" class="hint"></p><p id="msg" class="message"></p><div class="status-actions"><button id="saveProgress" type="button">途中保存</button><button class="primary" type="submit">登録して未整理から外す</button><button id="reset" type="button">閉じる</button></div></form></section></section>
 <section class="table"><div class="tablehead"><h2>登録済み明細</h2><select id="filter"><option value="">すべての費目</option></select></div><div class="tablewrap"><table><thead><tr><th>証拠</th><th>日付</th><th>店名</th><th>金額</th><th>状態</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section></main><section id="printview" class="print hide"><button id="closeprint">戻る</button> <button onclick="window.print()" class="primary">印刷 / PDF保存</button><div id="printcontent"></div></section>`;
 
+function installWorkspaceMarkup() {
+  const evidencePanel = $('#preview')?.closest('.panel');
+  if (!evidencePanel || $('#currentEvidence')) return;
+  evidencePanel.querySelector('h2').textContent = '現在作業中の原本';
+  const card = document.createElement('section');
+  card.id = 'currentEvidence';
+  card.className = 'current-evidence empty';
+  card.setAttribute('aria-live', 'polite');
+  card.innerHTML = '<div id="currentEvidenceInfo"></div><div id="currentEvidenceActions" class="current-evidence-actions"></div>';
+  evidencePanel.querySelector('.drop').before(card);
+  const readButton = $('#ocr');
+  readButton.textContent = '今すぐ読み取る';
+  const deferButton = document.createElement('button');
+  deferButton.id = 'deferCurrent'; deferButton.type = 'button'; deferButton.textContent = 'あとで整理';
+  const continueButton = document.createElement('button');
+  continueButton.id = 'continueCurrent'; continueButton.type = 'button'; continueButton.textContent = '続けて撮影';
+  $('#currentEvidenceActions').append(readButton, deferButton, continueButton);
+}
+
+installWorkspaceMarkup();
+
 function persist() { storage.saveMigratedState({ records, evidences, children }); storage.saveKnowledgeHistory(history); }
+function readerState(evidence) {
+  if (!evidence) return { label: '原本未選択', className: '' };
+  if (evidence.status === 'processing') return { label: '読み取り中', className: '' };
+  if (evidence.ocr?.status === 'completed') return { label: '読み取り済み・要確認', className: 'review' };
+  if (evidence.ocr?.status === 'failed') return { label: '読み取り失敗（再実行できます）', className: 'failed' };
+  return { label: '未読取', className: '' };
+}
+function renderCurrentEvidence() {
+  const host = $('#currentEvidence'), info = $('#currentEvidenceInfo'), actions = $('#currentEvidenceActions');
+  if (!host || !info || !actions) return;
+  const evidence = activeEvidence();
+  if (!evidence) {
+    host.className = 'current-evidence empty';
+    info.innerHTML = '<b>現在作業中の原本はありません</b><p>原本を選択すると、未整理へ保存したままここに表示されます。</p>';
+    actions.hidden = true;
+    return;
+  }
+  const reader = readerState(evidence);
+  rememberCurrentEvidence(evidence.id);
+  host.className = 'current-evidence';
+  info.innerHTML = `<div class="current-evidence-head"><div><p class="hint">現在作業中</p><h3>${esc(evidence.evidenceNumber)}</h3><p><b>未整理に保存済み</b> ／ ${esc(evidence.fileName)}</p></div><span class="reader-state ${reader.className}">${reader.label}</span></div>`;
+  actions.hidden = false;
+  $('#ocr').disabled = evidence.status === 'processing';
+  $('#deferCurrent').disabled = evidence.status === 'processing';
+}
+function rememberCurrentEvidence(evidenceId) { storage.saveCurrentEvidenceId(evidenceId || null); }
+function restoreWorkspaceItems(items) {
+  const apply = () => { if (!window.receiptItemsController) return false; window.receiptItemsController.setItems(items || []); return true; };
+  if (apply()) return;
+  let attempts = 0;
+  const timer = setInterval(() => { if (apply() || ++attempts >= 40) clearInterval(timer); }, 25);
+}
+async function receiptItemsController() {
+  if (window.receiptItemsController) return window.receiptItemsController;
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (window.receiptItemsController || ++attempts >= 40) {
+        clearInterval(timer);
+        resolve(window.receiptItemsController || null);
+      }
+    }, 25);
+  });
+}
 function setup() { $('#user').textContent = currentUser.email || ''; $('#child').innerHTML = '<option value="">選択してください</option>' + children.map((child) => `<option value="${esc(child.id)}">${esc(child.name)}</option>`).join(''); $('#category').innerHTML = '<option value="">選択してください</option>' + CATEGORY_OPTIONS.map((value) => `<option>${esc(value)}</option>`).join(''); $('#settlement').innerHTML = SETTLEMENT_OPTIONS.map((value) => `<option>${esc(value)}</option>`).join(''); $('#filter').innerHTML = '<option value="">すべての費目</option>' + CATEGORY_OPTIONS.map((value) => `<option>${esc(value)}</option>`).join(''); window.receiptItemsController?.setHistory(history); }
 function calc() { const form = $('#form'), amount = toNonNegativeNumber(form.amount.value), otherRate = Math.max(0, Math.min(100, Number(form.otherRate.value) || 0)), other = calculateOtherBurdenAmount(amount, otherRate), out = calculateOutstandingAmount(other, form.already.value); $('#other').value = yen(other); $('#outstanding').value = yen(out); return { amount, other, out }; }
 function filteredRecords() { return records.filter((record) => !$('#filter').value || f(record.category) === $('#filter').value).sort((left, right) => String(right.paidDate).localeCompare(String(left.paidDate))); }
@@ -49,7 +117,7 @@ function renderFilters() { const current = filterEvidence(); const filters = [['
 function sortedEvidence() { const direction = $('#evidenceOrder').value === 'old' ? 1 : -1; const current = filterEvidence(); return evidences.filter((evidence) => current === 'all' || (current === 'unorganized' ? evidence.status !== 'attached' : evidence.status === current)).sort((left, right) => direction * String(left.createdAt).localeCompare(String(right.createdAt))); }
 function renderUnorganized() { renderFilters(); const items = sortedEvidence(); $('#unorganizedList').innerHTML = items.length ? items.map((evidence) => `<article class="ecard"><b>${esc(evidence.evidenceNumber)}</b> <span class="badge">${evidenceLabel(evidence.status)}</span><p>${esc(evidence.fileName)}</p><p class="hint">追加: ${new Date(evidence.createdAt).toLocaleString('ja-JP')}<br>OCR: ${esc(evidence.ocr?.status || 'not_started')}</p><button data-organize="${esc(evidence.id)}">${evidence.status === 'attached' ? '原本を開く' : 'この証拠を整理する'}</button>${evidence.status !== 'attached' ? ` <button class="warn" data-discard="${esc(evidence.id)}">削除</button>` : ''}</article>`).join('') : '<p class="hint">該当する原本はありません。</p>'; }
 function renderRecords() { const emap = evidenceMap(); $('#rows').innerHTML = filteredRecords().map((record) => `<tr><td>${(record.evidenceIds || []).map((id) => esc(emap.get(id)?.evidenceNumber || '—')).join(' / ')}</td><td>${esc(record.paidDate)}</td><td>${esc(f(record.vendor))}</td><td class="right">${yen(f(record.amount))}</td><td>${esc(f(record.settlementStatus))}</td><td><button data-edit="${esc(record.id)}">編集</button><button class="warn" data-delete="${esc(record.id)}">削除</button></td></tr>`).join('') || '<tr><td colspan="6">登録済み明細はありません。</td></tr>'; }
-function render() { renderSummary(); renderUnorganized(); renderRecords(); }
+function render() { renderSummary(); renderUnorganized(); renderRecords(); renderCurrentEvidence(); }
 function clearPreview() { if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null; $('#preview').textContent = '未整理から原本を開くか、上の撮影ボタンで保存してください。'; }
 function resetForm() { activeEvidenceId = null; activeFile = null; activeOcr = null; editingRecordId = null; sources = {}; merchantCandidates = []; readerHeaders = {}; $('#form').reset(); $('#form').selfRate.value = 50; $('#form').otherRate.value = 50; $('#form').already.value = 0; $('#form').payer.value = '自分'; $('#formtitle').textContent = '後から整理'; $('#raw').value = ''; $('#corrected').value = ''; $('#filemeta').textContent = '証拠番号：未選択'; $('#filemsg').textContent = ''; $('#msg').textContent = ''; $('#candidates').classList.add('hide'); $('#ocr').disabled = true; window.receiptItemsController?.reset(); clearPreview(); calc(); }
 async function capture(file, { readNow = false } = {}) { if (!file) return; const error = validateFile(file); if (error) { $('#captureMessage').textContent = error; return; } $('#captureMessage').textContent = '原本を未整理へ保存中…'; try { const evidence = await saveUnorganizedEvidence({ file, evidences, saveFile }); evidences.push(evidence); persist(); activeEvidenceId = evidence.id; activeFile = file; activeOcr = evidence.ocr; if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = renderPreview($('#preview'), file, evidence.fileName); $('#filemeta').textContent = `証拠番号：${evidence.evidenceNumber} ／ ${evidence.fileName}`; $('#filemsg').textContent = readNow ? '未整理へ保存しました。これから文字を読み取ります。' : '未整理へ保存しました。画像を確認して、あとから整理できます。'; $('#ocr').disabled = false; render(); $('#captureMessage').innerHTML = readNow ? `未整理に保存しました（${esc(evidence.evidenceNumber)}）。文字を読み取っています…` : `未整理に保存しました（${esc(evidence.evidenceNumber)}）。 <button id="continueCapture" type="button">続けて撮影</button> <button id="readSaved" type="button">今すぐ読み取る</button> <button id="openSaved" type="button" data-id="${esc(evidence.id)}">未整理BOXを見る</button>`; if (readNow) await readActiveEvidence(); } catch (error) { $('#captureMessage').textContent = `原本の保存に失敗しました: ${error.message}`; } }
@@ -90,3 +158,46 @@ $('#form').addEventListener('input', (event) => { if (['paidDate', 'amount', 've
 $('#form').addEventListener('submit', register); $('#saveProgress').addEventListener('click', saveProgress); $('#reset').addEventListener('click', resetForm); $('#filter').addEventListener('change', renderRecords);
 $('#rows').addEventListener('click', (event) => { const button = event.target.closest('button'); if (!button) return; if (button.dataset.edit) editRecord(button.dataset.edit); if (button.dataset.delete) deleteRecord(button.dataset.delete); });
 $('#logout').addEventListener('click', () => logout()); $('#xlsx').addEventListener('click', xlsx); $('#docx').addEventListener('click', docx); $('#print').addEventListener('click', print); $('#closeprint').addEventListener('click', () => $('#printview').classList.add('hide'));
+
+function prepareNewCapture() {
+  activeEvidenceId = null; activeFile = null; activeOcr = null; editingRecordId = null;
+  sources = {}; merchantCandidates = []; readerHeaders = {};
+  $('#form').reset(); $('#form').selfRate.value = 50; $('#form').otherRate.value = 50; $('#form').already.value = 0; $('#form').payer.value = '自分';
+  $('#raw').value = ''; $('#corrected').value = ''; $('#progress').textContent = '';
+  $('#candidates').classList.add('hide');
+  window.receiptItemsController?.reset();
+  clearPreview(); renderCurrentEvidence();
+}
+
+for (const input of [$('#file'), $('#saveCamera'), $('#readCamera'), $('#quickFile'), $('#readFile')]) {
+  input.addEventListener('change', prepareNewCapture, true);
+}
+$('#deferCurrent').addEventListener('click', () => {
+  const evidence = activeEvidence();
+  if (!evidence) return;
+  $('#filemsg').textContent = '未整理に保存済みです。あとでこの原本を開いて整理できます。';
+  $('#captureMessage').textContent = `${evidence.evidenceNumber} を未整理に保存しました。`;
+  renderCurrentEvidence();
+});
+$('#continueCurrent').addEventListener('click', () => $('#saveCamera').click());
+$('#ocr').addEventListener('click', async (event) => {
+  if (window.receiptItemsController) return;
+  event.stopImmediatePropagation();
+  $('#progress').textContent = '商品明細の表示を準備中…';
+  const controller = await receiptItemsController();
+  if (!controller) { $('#progress').textContent = '商品明細の表示を準備できませんでした。再読み込みしてください。'; return; }
+  readActiveEvidence();
+}, true);
+
+const previewObserver = new MutationObserver(() => {
+  const evidence = activeEvidence();
+  if (!evidence) return;
+  renderCurrentEvidence();
+  restoreWorkspaceItems(evidence.organization?.items || []);
+});
+previewObserver.observe($('#preview'), { childList: true });
+
+const resumeEvidenceId = storage.loadCurrentEvidenceId();
+if (resumeEvidenceId && evidenceMap().get(resumeEvidenceId)?.status !== 'attached') {
+  openEvidence(resumeEvidenceId).catch(() => storage.saveCurrentEvidenceId(null));
+}

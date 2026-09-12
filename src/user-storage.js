@@ -10,7 +10,7 @@ function openDb(userId) { return new Promise((resolve, reject) => { const reques
 
 export function createUserStorage(userId) {
   if (!userId) throw new Error('認証済みユーザーIDが必要です。');
-  const root = namespaceForUser(userId); const keys = { records:`${root}records.v2`, evidences:`${root}evidences.v2`, children:`${root}children.v2`, history:`${root}knowledge-history.v1`, schema:`${root}schemaVersion` };
+  const root = namespaceForUser(userId); const keys = { records:`${root}records.v2`, evidences:`${root}evidences.v2`, children:`${root}children.v2`, history:`${root}knowledge-history.v1`, currentEvidence:`${root}current-evidence.v1`, schema:`${root}schemaVersion` };
   const saveFile = async (id, file) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put(file,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}); };
   const getFile = async (id) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const request=db.transaction('files').objectStore('files').get(id);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error);}); };
   const deleteFile = async (id) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}); };
@@ -19,6 +19,8 @@ export function createUserStorage(userId) {
     saveMigratedState: (state) => { write(keys.records,state.records);write(keys.evidences,state.evidences);write(keys.children,state.children);localStorage.setItem(keys.schema,String(SCHEMA_VERSION)); },
     loadKnowledgeHistory: () => { try { const value = JSON.parse(localStorage.getItem(keys.history)); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } },
     saveKnowledgeHistory: (value) => localStorage.setItem(keys.history, JSON.stringify(value && typeof value === 'object' ? value : {})),
+    loadCurrentEvidenceId: () => { const value = localStorage.getItem(keys.currentEvidence); return typeof value === 'string' && value.trim() ? value : null; },
+    saveCurrentEvidenceId: (evidenceId) => { if (typeof evidenceId === 'string' && evidenceId) localStorage.setItem(keys.currentEvidence, evidenceId); else localStorage.removeItem(keys.currentEvidence); },
     saveFile, getFile, deleteFile,
   };
 }
