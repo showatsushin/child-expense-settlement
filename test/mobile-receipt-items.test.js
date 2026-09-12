@@ -10,7 +10,9 @@ test('purchase-item cards use a single mobile column and preserve the OCR item p
   assert.match(ui, /receiptItemsController/);
   assert.match(ui, /extractReceiptItemCandidates/);
   assert.match(ui, /data-field="category"/);
-  assert.match(ui, /過去に確定した種別/);
-  assert.match(ui, /既存の種別候補/);
+  assert.match(ui, /過去に確定：/);
+  assert.match(ui, /候補：/);
   assert.match(ui, /data-action="apply-category"/);
+  assert.match(ui, /<details class="item-category-candidates"><summary>候補<\/summary>/);
+  assert.match(css, /\.category-history-candidates\{padding:/);
 });

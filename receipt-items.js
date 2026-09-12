@@ -86,11 +86,11 @@ function categoryCandidateButtons(item) {
     .filter((value, index, entries) => entries.indexOf(value) === index);
   const historical = unique(itemHistoryCandidates(confirmedHistory(), item.productName).map((entry) => entry.category));
   const existing = ITEM_CATEGORY_OPTIONS.filter((value) => !historical.includes(value));
-  const buttons = (categories) => categories.map((category) => '<button type="button" data-action="apply-category" data-value="'
+  const buttons = (categories, className = '') => categories.map((category) => '<button type="button" class="category-candidate-chip ' + className + '" data-action="apply-category" data-value="'
     + esc(encodeURIComponent(category)) + '">' + esc(category) + '</button>').join(' ');
-  return '<section class="item-category-candidates"><p class="hint">候補</p>'
-    + (historical.length ? '<p class="hint">過去に確定した種別：' + buttons(historical) + '</p>' : '')
-    + '<p class="hint">既存の種別候補：' + buttons(existing) + '</p></section>';
+  return '<details class="item-category-candidates"><summary>候補</summary><div class="item-category-candidate-list">'
+    + (historical.length ? '<p class="hint category-history-candidates">過去に確定：' + buttons(historical, 'history') + '</p>' : '')
+    + '<p class="hint">候補：' + buttons(existing) + '</p></div></details>';
 }
 
 function productHistoryButtons(item) {
