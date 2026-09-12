@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createEvidenceDocument } from '../src/models.js';
-import { saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, discardUnorganizedEvidence, latestDraftEvidence, markEvidenceUnorganized, unorganizedEvidences, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
+import { attachedEvidences, saveDraftEvidence, attachDraftEvidence, discardDraftEvidence, discardUnorganizedEvidence, latestDraftEvidence, markEvidenceUnorganized, unorganizedEvidences, deleteReceiptAndExclusiveEvidence } from '../src/evidence-lifecycle.js';
 
 function file(name = 'receipt.jpg', size = 3) { return { name, type: 'image/jpeg', size }; }
 
@@ -59,6 +59,13 @@ test('unorganized box filters existing evidence only and deletes only an unrefer
   assert.deepEqual(deleted, ['saved']); assert.deepEqual(removed.deletedEvidenceIds, ['saved']); assert.deepEqual(removed.evidences.map((evidence) => evidence.id), ['draft', 'attached', 'referenced']);
 });
 
+test('evidence list selects attached originals while the unorganized box selects unorganized originals', () => {
+  const evidences = [{ id: 'attached', status: 'attached' }, { id: 'unorganized', status: 'unorganized' }, { id: 'draft', status: 'draft' }];
+  assert.deepEqual(attachedEvidences(evidences).map((evidence) => evidence.id), ['attached']);
+  assert.deepEqual(unorganizedEvidences(evidences).map((evidence) => evidence.id), ['unorganized']);
+  assert.equal(attachedEvidences(evidences)[0], evidences[0]);
+});
+
 test('unorganized box reuses the existing blob preview and has no Reader action', () => {
   const phase2 = readFileSync(new URL('../phase2.js', import.meta.url), 'utf8');
   const boxRender = phase2.slice(phase2.indexOf('async function renderUnorganizedBox'), phase2.indexOf('async function deleteUnorganized'));
@@ -107,7 +114,8 @@ test('evidence list and unorganized box use closed native details with derived c
   assert.match(collapsible, /['"]証拠一覧['"]/);
   assert.match(collapsible, /['"]未整理BOX['"]/);
   assert.doesNotMatch(collapsible, /\.open\s*=\s*true|localStorage|saveFile|readReceipt/);
-  assert.match(render, /updateCollapsibleSummary\(evidenceDetails,evidences\.length\)/);
+  assert.match(render, /attachedEvidences\(evidences\)/);
+  assert.match(render, /updateCollapsibleSummary\(evidenceDetails,attached\.length\)/);
   assert.match(render, /updateCollapsibleSummary\(unorganizedDetails,unorganized\.length\)/);
   assert.match(render, /unorganizedEvidences\(evidences\)/);
 });

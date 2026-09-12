@@ -17,6 +17,10 @@ export function unorganizedEvidences(evidences) {
   return (Array.isArray(evidences) ? evidences : []).filter((evidence) => evidence?.status === 'unorganized');
 }
 
+export function attachedEvidences(evidences) {
+  return (Array.isArray(evidences) ? evidences : []).filter((evidence) => evidence?.status === 'attached');
+}
+
 export function attachDraftEvidence({ evidenceIds, evidenceId, evidences, ocr }) {
   const evidence = evidences.find((item) => item.id === evidenceId);
   if (evidence) { evidence.status = 'attached'; if (ocr) evidence.ocr = ocr; }
