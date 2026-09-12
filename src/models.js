@@ -1,4 +1,5 @@
-export const SOURCE_TYPES = ['manual', 'ocr', 'ocr_rule', 'template', 'ai', 'knowledge', 'imported'];
+export const SOURCE_TYPES = ['manual', 'ocr', 'ocr_rule', 'template', 'ai', 'knowledge', 'imported', 'user_confirmed_history', 'user_confirmed_document'];
+export const EVIDENCE_STATUSES = ['draft', 'unorganized', 'processing', 'review', 'organized', 'attached'];
 
 export function sourced(value = '', source = 'manual', confidence = null) {
   return { value, source: SOURCE_TYPES.includes(source) ? source : 'manual', confidence };
@@ -21,8 +22,22 @@ export function makeId(prefix) {
   return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
-export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr, status = 'attached' } = {}) {
-  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
+export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), updatedAt = createdAt, ocr, status = 'attached', organization } = {}) {
+  return {
+    id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0,
+    createdAt, updatedAt, status: EVIDENCE_STATUSES.includes(status) ? status : 'attached', ocr: normalizeOcr(ocr),
+    organization: normalizeEvidenceOrganization(organization),
+  };
+}
+
+function normalizeEvidenceOrganization(value) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    headers: value.headers && typeof value.headers === 'object' ? value.headers : {},
+    items: Array.isArray(value.items) ? value.items : [],
+    sources: value.sources && typeof value.sources === 'object' ? value.sources : {},
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : null,
+  };
 }
 
 function normalizePreprocessing(value) {
@@ -85,8 +100,13 @@ export function createExpenseRecord(data = {}) {
 
 export function createReceiptItem(data = {}, receiptId = '') {
   const now = new Date().toISOString(); const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-  const category = String(data.category || '').trim().slice(0, 80) || 'その他'; const submissionStatus = SUBMISSION_STATUS_OPTIONS.includes(data.submissionStatus) ? data.submissionStatus : 'review';
-  return { id: data.id || makeId('receipt-item'), receiptId: String(data.receiptId || receiptId || ''), lineOrder: Math.max(1, Math.floor(number(data.lineOrder, 1))), productName: String(data.productName || ''), quantity: Math.max(0, number(data.quantity, 1)), unitPrice: Math.max(0, number(data.unitPrice, 0)), amount: Math.max(0, number(data.amount, 0)), category, purpose: sourced(data.purpose?.value ?? data.purpose ?? '', data.purpose?.source, data.purpose?.confidence ?? null), submissionStatus, source: SOURCE_TYPES.includes(data.source) ? data.source : 'manual', confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null, basis: Array.isArray(data.basis) ? data.basis.filter((item) => typeof item === 'string').map(String).slice(0, 12) : [], sourceLineNumbers: Array.isArray(data.sourceLineNumbers) ? data.sourceLineNumbers.map(Number).filter(Number.isInteger).filter((value) => value > 0).slice(0, 20) : [], sourceLines: Array.isArray(data.sourceLines) ? data.sourceLines.filter((line) => typeof line === 'string').map(String).slice(0, 20) : [], knowledgeKey: typeof data.knowledgeKey === 'string' && data.knowledgeKey.trim() ? data.knowledgeKey.trim().slice(0, 80) : null, knowledgeSource: typeof data.knowledgeSource === 'string' && data.knowledgeSource.trim() ? data.knowledgeSource.trim().slice(0, 80) : null, knowledgeVersion: Number.isInteger(Number(data.knowledgeVersion)) && Number(data.knowledgeVersion) > 0 ? Number(data.knowledgeVersion) : null, purposeSource: ['knowledge', 'manual', 'manual_override'].includes(data.purposeSource) ? data.purposeSource : (data.knowledgeKey ? 'knowledge' : 'manual'), categorySource: ['knowledge', 'manual', 'manual_override'].includes(data.categorySource) ? data.categorySource : (data.knowledgeKey ? 'knowledge' : 'manual'), originalKnowledgePurpose: typeof data.originalKnowledgePurpose === 'string' && data.originalKnowledgePurpose ? data.originalKnowledgePurpose : null, notes: String(data.notes || ''), createdAt: data.createdAt || now, updatedAt: now };
+  const category = String(data.category || '').trim().slice(0, 80); const submissionStatus = SUBMISSION_STATUS_OPTIONS.includes(data.submissionStatus) ? data.submissionStatus : 'review';
+  const knowledgeKey = typeof data.knowledgeKey === 'string' && data.knowledgeKey.trim() ? data.knowledgeKey.trim().slice(0, 80) : null;
+  const knowledgeSelectionState = ['unselected', 'manual', 'selected'].includes(data.knowledgeSelectionState)
+    ? data.knowledgeSelectionState : (knowledgeKey ? 'selected' : 'unselected');
+  const sourceExcerpt = typeof data.sourceExcerpt === 'string' && data.sourceExcerpt
+    ? data.sourceExcerpt : (typeof data.originalKnowledgePurpose === 'string' && data.originalKnowledgePurpose ? data.originalKnowledgePurpose : null);
+  return { id: data.id || makeId('receipt-item'), receiptId: String(data.receiptId || receiptId || ''), lineOrder: Math.max(1, Math.floor(number(data.lineOrder, 1))), productName: String(data.productName || ''), quantity: Math.max(0, number(data.quantity, 1)), unitPrice: Math.max(0, number(data.unitPrice, 0)), amount: Math.max(0, number(data.amount, 0)), category, purpose: sourced(data.purpose?.value ?? data.purpose ?? '', data.purpose?.source, data.purpose?.confidence ?? null), submissionStatus, source: SOURCE_TYPES.includes(data.source) ? data.source : 'manual', confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : null, basis: Array.isArray(data.basis) ? data.basis.filter((item) => typeof item === 'string').map(String).slice(0, 12) : [], sourceLineNumbers: Array.isArray(data.sourceLineNumbers) ? data.sourceLineNumbers.map(Number).filter(Number.isInteger).filter((value) => value > 0).slice(0, 20) : [], sourceLines: Array.isArray(data.sourceLines) ? data.sourceLines.filter((line) => typeof line === 'string').map(String).slice(0, 20) : [], knowledgeKey, knowledgeSelectionState, knowledgeSource: typeof data.knowledgeSource === 'string' && data.knowledgeSource.trim() ? data.knowledgeSource.trim().slice(0, 80) : null, knowledgeVersion: Number.isInteger(Number(data.knowledgeVersion)) && Number(data.knowledgeVersion) > 0 ? Number(data.knowledgeVersion) : null, purposeSource: ['knowledge', 'manual', 'manual_override'].includes(data.purposeSource) ? data.purposeSource : (knowledgeKey ? 'knowledge' : 'manual'), categorySource: ['knowledge', 'manual', 'manual_override'].includes(data.categorySource) ? data.categorySource : (knowledgeKey ? 'knowledge' : 'manual'), sourceExcerpt, originalKnowledgePurpose: sourceExcerpt, notes: String(data.notes || ''), createdAt: data.createdAt || now, updatedAt: now };
 }
 export function sanitizeReceiptItems(value, receiptId = '') { return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object').map((item, index) => createReceiptItem({ ...item, lineOrder: item.lineOrder ?? index + 1 }, receiptId)) : []; }
 export function sanitizeExpenseRecords(value) {
