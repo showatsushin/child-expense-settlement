@@ -69,3 +69,10 @@ test('a selected original offers exactly save or read now, and read now uses the
   assert.match(phase2, /savePendingCapture\(\{ readNow: true \}\)/);
   assert.match(phase2, /await readActiveEvidence\(\)/);
 });
+
+test('each new capture input clears the prior evidence workspace before selecting its file', () => {
+  for (const input of ['captureCamera', 'captureFile']) {
+    assert.match(phase2, new RegExp(`\\$\\('#${input}'\\)\\.addEventListener\\('change', \\(event\\) => \\{ const file = event\\.target\\.files\\?\\.\\[0\\]; if \\(!file\\) return; prepareNewCapture\\(\\); selectForCapture\\(file\\); \\}\\)`));
+  }
+  assert.match(receiptItems, /existingItems\.length === 0/);
+});

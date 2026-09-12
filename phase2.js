@@ -270,8 +270,8 @@ $('#deferCurrent').addEventListener('click', () => {
   renderCurrentEvidence();
 });
 $('#continueCurrent').addEventListener('click', () => $('#saveCamera').click());
-$('#captureCamera').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
-$('#captureFile').addEventListener('change', (event) => selectForCapture(event.target.files?.[0]));
+$('#captureCamera').addEventListener('change', (event) => { const file = event.target.files?.[0]; if (!file) return; prepareNewCapture(); selectForCapture(file); });
+$('#captureFile').addEventListener('change', (event) => { const file = event.target.files?.[0]; if (!file) return; prepareNewCapture(); selectForCapture(file); });
 $('#savePending').addEventListener('click', () => savePendingCapture());
 $('#readPending').addEventListener('click', () => savePendingCapture({ readNow: true }));
 $('#captureAgain').addEventListener('click', () => $('#captureCamera').click());
