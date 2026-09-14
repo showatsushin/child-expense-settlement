@@ -1,5 +1,6 @@
 import { calculateSummary, calculateReceiptSummary, receiptClaimTotal, receiptDifference, receiptItemTotal, receiptTotal } from './calculations.js';
 import { formatSubmissionEvidenceNumber } from './submission-evidence-number.js';
+import { amountInputModeLabel, taxRateLabel } from './item-tax.js';
 
 const field = (value) => value?.value ?? value ?? '';
 const internalEvidenceNumbers = (record, evidenceById) => (record.evidenceIds || []).map((id) => evidenceById.get(id)?.evidenceNumber || '').filter(Boolean).join(' / ');
@@ -12,7 +13,7 @@ const wordEvidenceReference = (record, evidenceById) => {
 export function buildWorkbookData(records, evidences, children) {
   const source = Array.isArray(records) ? records : []; const evidenceById = new Map((evidences || []).map((item) => [item.id,item])); const childById = new Map((children || []).map((item) => [item.id,item]));
   const settlement = [['内部管理番号','提出用証拠番号','購入日','対象児童','会計費目','購入店','レシート総額','商品明細合計','提出対象額','レシート総額との差額','相手負担想定額','既払い額','未清算額','状態','備考'], ...source.map((record) => [internalEvidenceNumbers(record,evidenceById),submissionEvidenceNumbers(record,evidenceById),record.paidDate,childById.get(field(record.childId))?.name || '',field(record.category),field(record.vendor),receiptTotal(record),receiptItemTotal(record),receiptClaimTotal(record),receiptDifference(record),record.otherBurdenAmount,record.alreadyPaidAmount,record.outstandingAmount,field(record.settlementStatus),record.notes])];
-  const receiptItems = [['内部管理番号','提出用証拠番号','購入日','店名','商品名','数量','単価','金額','種別','購入目的・必要性','提出状態','根拠','備考'], ...source.flatMap((record) => (record.items || []).map((item) => [internalEvidenceNumbers(record,evidenceById),submissionEvidenceNumbers(record,evidenceById),record.paidDate,field(record.vendor),item.productName,item.quantity,item.unitPrice,item.amount,item.category,field(item.purpose),item.submissionStatus,(item.basis || []).join(' / '),item.notes]))];
+  const receiptItems = [['内部管理番号','提出用証拠番号','購入日','店名','商品名','数量','単価','金額','税率','金額入力区分','種別','購入目的・必要性','提出状態','根拠','備考'], ...source.flatMap((record) => (record.items || []).map((item) => [internalEvidenceNumbers(record,evidenceById),submissionEvidenceNumbers(record,evidenceById),record.paidDate,field(record.vendor),item.productName,item.quantity,item.unitPrice,item.amount,taxRateLabel(item.taxRate),amountInputModeLabel(item.amountInputMode),item.category,field(item.purpose),item.submissionStatus,(item.basis || []).join(' / '),item.notes]))];
   const receiptSummary = calculateReceiptSummary(source); const oldSummary = calculateSummary(source);
   return {
     settlement,

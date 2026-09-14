@@ -110,3 +110,8 @@ test('saved receipt item preserves OCR source lines for audit', () => {
   assert.deepEqual(item.sourceLineNumbers, [3, 4]);
   assert.deepEqual(item.sourceLines, ['water', '100']);
 });
+
+test('receipt-item editor exposes manual tax rate and explicit tax-inclusive application only', async () => {
+  const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
+  assert.match(ui, /data-field="taxRate"/); assert.match(ui, /data-field="amountInputMode"/); assert.match(ui, /data-tax-exclusive/); assert.match(ui, /apply-tax-inclusive/);
+});

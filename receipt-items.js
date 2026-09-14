@@ -1,5 +1,6 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
+import { calculateTaxInclusiveAmount } from './src/item-tax.js';
 import { itemHistoryCandidates, productHistoryCandidates } from './src/confirmed-history.js';
 import { purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
 import {
@@ -19,6 +20,7 @@ let items = [];
 let cachedOcrCandidates = [];
 let ocrQuality = null;
 let host;
+const taxExclusiveInputs = new Map();
 
 function totals() {
   const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -102,6 +104,22 @@ function productHistoryButtons(item) {
     + '</p>';
 }
 
+function taxOption(value, label, selected) {
+  return '<option value="' + value + '"' + (selected ? ' selected' : '') + '>' + label + '</option>';
+}
+
+function taxControls(item) {
+  const mode = item.amountInputMode || 'tax_included'; const rate = item.taxRate || 'unknown';
+  const taxExclusiveAmount = taxExclusiveInputs.get(item.id) ?? '';
+  const taxInclusiveAmount = mode === 'tax_excluded' ? calculateTaxInclusiveAmount(taxExclusiveAmount, rate) : null;
+  const modes = [taxOption('tax_included','税込',mode === 'tax_included'),taxOption('tax_excluded','税抜',mode === 'tax_excluded')].join('');
+  const rates = [taxOption('8','8%',rate === '8'),taxOption('10','10%',rate === '10'),taxOption('exempt','非課税',rate === 'exempt'),taxOption('out_of_scope','対象外',rate === 'out_of_scope'),taxOption('unknown','不明',rate === 'unknown')].join('');
+  const reference = mode !== 'tax_excluded' ? '' : (!['8','10'].includes(rate)
+    ? '<p class="help full">税率未確認・非課税・対象外では税込参考額を計算しません。</p>'
+    : '<label>税抜金額<input data-tax-exclusive type="number" min="0" step="0.01" value="' + esc(taxExclusiveAmount) + '"></label><div class="full tax-reference">税込参考額: ' + (taxInclusiveAmount == null ? '—' : yen(taxInclusiveAmount)) + (taxInclusiveAmount == null ? '' : ' <button type="button" class="secondary" data-action="apply-tax-inclusive">税込額へ反映</button>') + '<span class="help"> 参考値（1円単位・四捨五入）。原本の記載金額を優先してください。</span></div>');
+  return '<div class="receipt-item-grid item-tax-fields"><label>金額入力<select data-field="amountInputMode">' + modes + '</select></label><label>税率<select data-field="taxRate">' + rates + '</select></label>' + reference + '</div>';
+}
+
 function row(item, index) {
   const statuses = [
     ['included', '提出する'],
@@ -124,6 +142,7 @@ function row(item, index) {
     + '<label>単価<input data-field="unitPrice" type="number" min="0" step="0.01" value="' + esc(item.unitPrice) + '"></label>'
     + '<label>金額<input data-field="amount" type="number" min="0" step="0.01" value="' + esc(item.amount) + '"></label>'
     + '</div>'
+    + taxControls(item)
     + productHistoryButtons(item)
     + knowledgeControl(item)
     + '<div class="receipt-item-grid item-edit-fields">'
@@ -275,7 +294,11 @@ function handleAction(button) {
   }
   const card = button.closest('[data-id]');
   if (!card) return;
-  if (action === 'apply-category') {
+  if (action === 'apply-tax-inclusive') {
+    const item = items.find((candidate) => candidate.id === card.dataset.id);
+    const amount = calculateTaxInclusiveAmount(taxExclusiveInputs.get(card.dataset.id), item?.taxRate);
+    if (amount != null) update(card.dataset.id, 'amount', amount);
+  } else if (action === 'apply-category') {
     update(card.dataset.id, 'category', decodeURIComponent(button.dataset.value || ''));
   } else if (action === 'apply-history-product') {
     update(card.dataset.id, 'productName', decodeURIComponent(button.dataset.value || ''));
@@ -346,7 +369,9 @@ function install() {
 
   host.addEventListener('input', (event) => {
     const card = event.target.closest('[data-id]');
-    if (!card || !event.target.dataset.field) return;
+    if (!card) return;
+    if (event.target.dataset.taxExclusive !== undefined) { taxExclusiveInputs.set(card.dataset.id, event.target.value); return; }
+    if (!event.target.dataset.field) return;
     const field = event.target.dataset.field;
     const keepEditing = ['productName', 'category', 'purpose', 'notes'].includes(field);
     update(card.dataset.id, field, event.target.value, !keepEditing);
@@ -355,7 +380,9 @@ function install() {
   host.addEventListener('change', (event) => {
     const card = event.target.closest('[data-id]');
     if (!card) return;
-    if (event.target.dataset.knowledgeKey !== undefined) {
+    if (event.target.dataset.taxExclusive !== undefined) {
+      taxExclusiveInputs.set(card.dataset.id, event.target.value); render();
+    } else if (event.target.dataset.knowledgeKey !== undefined) {
       selectKnowledge(card.dataset.id, event.target.value);
     } else if (event.target.dataset.field && event.target.dataset.field !== 'purpose') {
       update(card.dataset.id, event.target.dataset.field, event.target.value);
@@ -370,6 +397,7 @@ function install() {
   window.receiptItemsController = {
     getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })),
     setItems: (value) => {
+      taxExclusiveInputs.clear();
       items = (Array.isArray(value) ? value : []).map((item, index) =>
         createReceiptItem({ ...item, lineOrder: index + 1 }));
       render();
@@ -380,6 +408,7 @@ function install() {
       items = [];
       cachedOcrCandidates = [];
       ocrQuality = null;
+      taxExclusiveInputs.clear();
       render();
     },
   };

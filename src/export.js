@@ -1,5 +1,6 @@
 import { calculateSummary } from './calculations.js';
 import { formatSubmissionEvidenceNumber } from './submission-evidence-number.js';
+import { amountInputModeLabel, taxRateLabel } from './item-tax.js';
 
 const field = (value) => value?.value ?? value ?? '';
 const yen = (value) => Number(value || 0).toLocaleString('ja-JP');
@@ -24,8 +25,8 @@ export function makeReceiptSummaryCsv(records, evidenceById) {
   return '\uFEFF' + [headers,...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
 }
 export function makeReceiptItemsCsv(records, evidenceById) {
-  const headers = ['内部管理番号','提出用証拠番号','購入日','店名','商品名','数量','単価','金額','種別','購入目的・必要性','提出状態','根拠','備考'];
-  const rows = (records || []).flatMap((record) => (record.items || []).map((item) => [internalEvidenceNumbers(record,evidenceById),submissionEvidenceNumbers(record,evidenceById),record.paidDate,field(record.vendor),item.productName,item.quantity,item.unitPrice,item.amount,item.category,field(item.purpose),item.submissionStatus,(item.basis || []).join(' / '),item.notes]));
+  const headers = ['内部管理番号','提出用証拠番号','購入日','店名','商品名','数量','単価','金額','税率','金額入力区分','種別','購入目的・必要性','提出状態','根拠','備考'];
+  const rows = (records || []).flatMap((record) => (record.items || []).map((item) => [internalEvidenceNumbers(record,evidenceById),submissionEvidenceNumbers(record,evidenceById),record.paidDate,field(record.vendor),item.productName,item.quantity,item.unitPrice,item.amount,taxRateLabel(item.taxRate),amountInputModeLabel(item.amountInputMode),item.category,field(item.purpose),item.submissionStatus,(item.basis || []).join(' / '),item.notes]));
   return '\uFEFF' + [headers,...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
 }
 export function downloadReceiptCsv(content, filename) { const blob = new Blob([content], { type:'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = Object.assign(document.createElement('a'), { href:url, download:filename }); anchor.click(); URL.revokeObjectURL(url); }
