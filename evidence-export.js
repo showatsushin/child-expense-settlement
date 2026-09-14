@@ -30,13 +30,27 @@ async function appendOriginal(current, evidence, pair) {
   pair.append(original);
 }
 
-async function renderSubmission(receiptId = '') {
+export async function renderSubmission({ receiptId = '', records: suppliedRecords = null, requireOriginals = false, periodLabel = '' } = {}) {
   const current = await app();
-  const records = current.getRecords().filter((record) => !receiptId || record.id === receiptId);
+  const records = (suppliedRecords || current.getRecords()).filter((record) => !receiptId || record.id === receiptId);
+  const evidences = current.getEvidences();
+  const evidenceById = new Map(evidences.map((evidence) => [evidence.id, evidence]));
+  const referencedIds = [...new Set(records.flatMap((record) => record.evidenceIds || []))];
+  const missingMetadata = referencedIds.filter((id) => !evidenceById.has(id));
+  if (requireOriginals && missingMetadata.length) throw new Error(`参照先 Evidence metadata が見つかりません: ${missingMetadata.join(', ')}`);
+  const bundles = buildSubmissionBundles(records, evidences);
+  if (requireOriginals) {
+    const missing = [];
+    for (const evidence of [...new Map(bundles.map((bundle) => [bundle.evidence.id, bundle.evidence])).values()]) {
+      if (!await current.getFile(evidence.id)) missing.push(`${submissionNumber(evidence)}（${evidence.evidenceNumber}）`);
+    }
+    if (missing.length) throw new Error(`原本が見つかりません: ${missing.join('、')}`);
+  }
   const view = openView();
   view.innerHTML = `<div class="print-toolbar"><button type="button" class="primary" data-print>この内容を印刷 / PDF保存</button><button type="button" class="secondary" data-close>戻る</button></div><article class="print-sheet"><section id="submissionBundles"></section></article>`;
   const host = view.querySelector('#submissionBundles');
-  for (const bundle of buildSubmissionBundles(records, current.getEvidences())) {
+  if (periodLabel) host.insertAdjacentHTML('beforeend', `<p>対象期間：${esc(periodLabel)}</p>`);
+  for (const bundle of bundles) {
     const pair = document.createElement('section');
     pair.className = 'receipt-evidence-set';
     pair.dataset.evidenceNumber = bundle.evidence.evidenceNumber; pair.dataset.submissionEvidenceNumber = submissionNumber(bundle.evidence);
@@ -51,6 +65,7 @@ async function renderSubmission(receiptId = '') {
 
 async function install() {
   const current = await app();
+  current.renderSubmissionExport = (records, options = {}) => renderSubmission({ records, ...options });
   const header = document.querySelector('.top > div:last-child');
   if (!header) return;
   const submission = document.createElement('button');
@@ -74,7 +89,7 @@ document.addEventListener('click', (event) => {
   if (!button) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  renderSubmission(button.dataset.submissionRecord);
+  renderSubmission({ receiptId:button.dataset.submissionRecord });
 }, true);
 
 install();

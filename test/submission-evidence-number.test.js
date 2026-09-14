@@ -48,6 +48,13 @@ test('Excel, CSV, Word, print, and submission material expose both number concep
   const material = readFileSync(new URL('../evidence-export.js', import.meta.url), 'utf8'); assert.match(material, /submissionNumber\(evidence\)/); assert.match(material, /内部管理番号/);
 });
 
+test('period-scoped submission export is available and preflights originals before rendering', () => {
+  const material = readFileSync(new URL('../evidence-export.js', import.meta.url), 'utf8');
+  assert.match(material, /renderSubmissionExport/);
+  assert.match(material, /requireOriginals/);
+  assert.match(material, /原本が見つかりません/);
+});
+
 test('numbering UI previews before confirmation, warns on reassignment, and supports individual edits', () => {
   const ui = readFileSync(new URL('../submission-numbering-ui.js', import.meta.url), 'utf8');
   assert.match(ui, /提出用証拠番号を一括採番/); assert.match(ui, /プレビューを表示しています。まだ保存していません。/); assert.match(ui, /既存の提出用証拠番号があります。再採番すると番号が変更されます。/); assert.match(ui, /個別に編集/); assert.match(ui, /assertUniqueSubmissionEvidenceNumbers/);

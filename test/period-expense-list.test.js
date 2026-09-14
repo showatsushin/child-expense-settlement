@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildPeriodExpenseList, monthDateRange } from '../src/period-expense-list.js';
+import { buildPeriodExpenseList, filterRecordsByPeriod, monthDateRange } from '../src/period-expense-list.js';
 
 test('monthDateRange returns the requested calendar month', () => {
   assert.deepEqual(monthDateRange(new Date(2026, 8, 12)), { start: '2026-09-01', end: '2026-09-30' });
@@ -19,4 +19,12 @@ test('buildPeriodExpenseList filters by payment date and totals receipt-level va
   assert.equal(list.receiptTotal, 1200);
   assert.equal(list.submissionTotal, 900);
   assert.equal(list.otherBurdenAmount, 950);
+});
+
+test('period list delegates date selection to the common filter', () => {
+  const records = [{ id:'included', paidDate:'2026-09-01' }, { id:'unknown', paidDate:'' }];
+  const filtered = filterRecordsByPeriod(records, { startDate:'2026-09-01', endDate:'2026-09-30' });
+  const list = buildPeriodExpenseList(records, { start:'2026-09-01', end:'2026-09-30' });
+  assert.deepEqual(list.rows.map((row) => row.record.id), filtered.selectedRecords.map((record) => record.id));
+  assert.deepEqual(list.excludedUnknownDateRecords.map((record) => record.id), ['unknown']);
 });
