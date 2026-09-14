@@ -20,13 +20,14 @@ function settlementMarkup(record, evidence) {
 async function appendOriginal(current, evidence, pair) {
   const original = document.createElement('article');
   original.className = 'submitted-evidence';
-  original.innerHTML = `<h1>${esc(submissionNumber(evidence))} 原本証拠</h1><p>内部管理番号: ${esc(evidence.evidenceNumber)}</p><p>${esc(evidence.fileName)}</p>`;
+  original.innerHTML = `<div class="original-evidence-content"><header class="original-evidence-header"><h1>${esc(submissionNumber(evidence))} 原本証拠</h1><p>内部管理番号: ${esc(evidence.evidenceNumber)}</p><p>${esc(evidence.fileName)}</p></header><div class="original-evidence-image"></div></div>`;
+  const originalImage = original.querySelector('.original-evidence-image');
   const file = await current.getFile(evidence.id);
-  if (!file) original.insertAdjacentHTML('beforeend', '<p class="difference-warning">原本ファイルがこの端末にありません。</p>');
+  if (!file) originalImage.insertAdjacentHTML('beforeend', '<p class="difference-warning">原本ファイルがこの端末にありません。</p>');
   else {
     const url = URL.createObjectURL(file);
-    if (isPdf(evidence)) original.insertAdjacentHTML('beforeend', `<p>PDF原本: <a href="${url}" target="_blank" rel="noopener">${esc(evidence.fileName)}を開く</a></p>`);
-    else original.append(Object.assign(document.createElement('img'), { src: url, alt: `${evidence.evidenceNumber} ${evidence.fileName}` }));
+    if (isPdf(evidence)) originalImage.insertAdjacentHTML('beforeend', `<p>PDF原本: <a href="${url}" target="_blank" rel="noopener">${esc(evidence.fileName)}を開く</a></p>`);
+    else originalImage.append(Object.assign(document.createElement('img'), { src: url, alt: `${evidence.evidenceNumber} ${evidence.fileName}` }));
   }
   pair.append(original);
 }

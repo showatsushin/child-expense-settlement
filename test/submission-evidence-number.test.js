@@ -56,6 +56,16 @@ test('period-scoped submission export is available and preflights originals befo
   assert.match(material, /submission-evidence-/);
 });
 
+test('submission print keeps each original evidence heading and image in one print unit', () => {
+  const material = readFileSync(new URL('../evidence-export.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  assert.match(material, /original-evidence-content/); assert.match(material, /original-evidence-header/); assert.match(material, /original-evidence-image/);
+  assert.match(css, /original-evidence-content\{break-inside:avoid;page-break-inside:avoid/);
+  assert.match(css, /original-evidence-header\{break-after:avoid;page-break-after:avoid/);
+  assert.match(css, /original-evidence-image img\{display:block;max-width:100%;height:auto;max-height:210mm/);
+  assert.match(css, /submitted-evidence\{break-after:page;page-break-after:always/);
+});
+
 test('numbering UI previews before confirmation, warns on reassignment, and supports individual edits', () => {
   const ui = readFileSync(new URL('../submission-numbering-ui.js', import.meta.url), 'utf8');
   assert.match(ui, /提出用証拠番号を一括採番/); assert.match(ui, /プレビューを表示しています。まだ保存していません。/); assert.match(ui, /既存の提出用証拠番号があります。再採番すると番号が変更されます。/); assert.match(ui, /個別に編集/); assert.match(ui, /assertUniqueSubmissionEvidenceNumbers/);
