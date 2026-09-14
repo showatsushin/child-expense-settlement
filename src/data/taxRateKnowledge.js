@@ -9,7 +9,7 @@ export const TAX_RATE_KNOWLEDGE = Object.freeze([
   }),
   Object.freeze({
     key: 'food',
-    matchingAliases: ['お菓子', 'クッキー', '食品', '食料品'],
+    matchingAliases: ['たまごサンド', 'ポテトスナック', 'じゃがりこ', 'お菓子', 'クッキー', '食料品', 'たまご', '玉子', '卵', 'サンド', 'スナック', '食品'],
     suggestedTaxRate: '8',
     basis: '飲食料品候補',
   }),

@@ -5,6 +5,8 @@ import { suggestedTaxRateForProduct, taxRateSuggestionsForProduct } from '../src
 test('tax-rate Knowledge offers beverage and food as reduced-rate candidates only', () => {
   assert.equal(suggestedTaxRateForProduct('いろはす 555ml'), '8');
   assert.equal(suggestedTaxRateForProduct('お菓子'), '8');
+  assert.equal(suggestedTaxRateForProduct('たまごサンド'), '8');
+  assert.equal(suggestedTaxRateForProduct('じゃがりこサラダ'), '8');
   assert.equal(taxRateSuggestionsForProduct('お菓子')[0].basis, '飲食料品候補');
 });
 

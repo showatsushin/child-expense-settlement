@@ -4,7 +4,7 @@ const confirmedDocument = '各購入目的';
 const MATCHING_ALIASES_BY_KEY = Object.freeze({
   drinking_water: ['お茶', 'ジュース'],
   rehabilitation_training: ['シールブック', 'パズル', '折り紙', '玩具'],
-  food: ['お菓子', 'クッキー', '食品'],
+  food: ['お菓子', 'クッキー', '食品', 'たまご', '玉子', '卵', 'サンド', 'たまごサンド', 'じゃがりこ', 'ポテトスナック', 'スナック'],
   bathing_aid: ['入浴剤'],
   general_hygiene: ['ティッシュ', 'ティシュー', 'ボックスティッシュ', '箱ティッシュ', 'ネピア', '鼻紙', 'ウェットティッシュ', 'ハンドソープ'],
 });

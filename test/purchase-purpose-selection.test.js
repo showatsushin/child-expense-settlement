@@ -18,6 +18,8 @@ test('matching aliases offer deterministic recommendations without changing the 
   assert.equal(knowledgeCandidatesForProduct('ネピア ティッシュ 5コパック')[0].key, 'general_hygiene');
   assert.equal(knowledgeCandidatesForProduct('いろはす')[0].key, 'drinking_water');
   assert.equal(knowledgeCandidatesForProduct('シールブック')[0].key, 'rehabilitation_training');
+  assert.equal(knowledgeCandidatesForProduct('たまごサンド')[0].key, 'food');
+  assert.equal(knowledgeCandidatesForProduct('じゃがりこサラダ')[0].key, 'food');
   assert.equal(purchasePurposeKnowledgeByKey('general_hygiene').sourceAliases.length, 0);
   assert.ok(purchasePurposeKnowledgeByKey('general_hygiene').matchingAliases.includes('ティッシュ'));
 });

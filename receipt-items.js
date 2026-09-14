@@ -83,24 +83,40 @@ function knowledgeControl(item) {
     + source + '</section>';
 }
 
+function sourceExcerptSummary(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > 88 ? text.slice(0, 88) + '…' : text;
+}
+
 function knowledgeRecommendations(item) {
+  const current = selectedKnowledge(item);
   const recommendations = knowledgeCandidatesForProduct(item.productName).slice(0, 3);
   if (!recommendations.length) {
-    return '<p class="help item-recommendation-empty">推奨Knowledgeはありません。修正から全Knowledge一覧または手入力を選べます。</p>';
+    return '<section class="item-recommendations"><span>Knowledge</span><p>現在: <strong>'
+      + esc(current?.category || '未選択') + '</strong></p><p>推奨: なし</p>'
+      + '<button type="button" class="small-button" data-action="choose-knowledge">Knowledgeを選ぶ</button></section>';
   }
-  const buttons = recommendations.map((entry) => '<button type="button" class="secondary" data-action="apply-knowledge" data-value="'
-    + esc(encodeURIComponent(entry.key)) + '">' + esc(entry.category) + 'を使う</button>').join(' ');
-  return '<section class="item-recommendations"><span>推奨Knowledge:</span> ' + buttons
+  const rows = recommendations.map((entry) => '<div class="item-recommendation"><p>推奨: <strong>' + esc(entry.category) + '</strong></p>'
+    + '<p class="help">' + esc(sourceExcerptSummary(entry.sourceExcerpt)) + '</p>'
+    + '<button type="button" class="secondary" data-action="apply-knowledge" data-value="'
+    + esc(encodeURIComponent(entry.key)) + '">この推奨を使う</button></div>').join('');
+  return '<section class="item-recommendations"><span>Knowledge</span><p>現在: <strong>'
+    + esc(current?.category || '未選択') + '</strong></p>' + rows
     + ' <button type="button" class="small-button" data-action="choose-knowledge">別のKnowledgeを選ぶ</button></section>';
 }
 
 function taxRateRecommendations(item) {
+  const current = taxRateLabel(item.taxRate || 'unknown');
   const recommendations = taxRateSuggestionsForProduct(item.productName);
-  if (!recommendations.length) return '';
-  const buttons = recommendations.map((entry) => '<button type="button" class="secondary" data-action="apply-tax-suggestion" data-value="'
-    + esc(entry.suggestedTaxRate) + '">' + esc(taxRateLabel(entry.suggestedTaxRate)) + 'を使う</button>').join(' ');
+  if (!recommendations.length) {
+    return '<section class="item-recommendations"><span>税率</span><p>現在: <strong>' + esc(current)
+      + '</strong></p><p>推奨: なし</p></section>';
+  }
+  const buttons = recommendations.map((entry) => '<div class="item-recommendation"><p>推奨: <strong>'
+    + esc(taxRateLabel(entry.suggestedTaxRate)) + '</strong></p><button type="button" class="secondary" data-action="apply-tax-suggestion" data-value="'
+    + esc(entry.suggestedTaxRate) + '">' + esc(taxRateLabel(entry.suggestedTaxRate)) + 'を使う</button></div>').join('');
   const basis = recommendations.map((entry) => esc(entry.basis)).filter((value, index, values) => values.indexOf(value) === index).join(' / ');
-  return '<section class="item-recommendations"><span>推奨税率:</span> ' + buttons
+  return '<section class="item-recommendations"><span>税率</span><p>現在: <strong>' + esc(current) + '</strong></p>' + buttons
     + '<span class="help"> ' + basis + '。候補であり自動確定しません。</span></section>';
 }
 
