@@ -17,11 +17,21 @@ export function createUserStorage(userId) {
   const saveFile = async (id, file) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put(file,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}); };
   const getFile = async (id) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const request=db.transaction('files').objectStore('files').get(id);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error);}); };
   const deleteFile = async (id) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}); };
+  const listFiles = async () => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const request=db.transaction('files').objectStore('files').openCursor();const files=[];request.onsuccess=()=>{const cursor=request.result;if(!cursor){resolve(files);return;}files.push({id:String(cursor.key),file:cursor.value});cursor.continue();};request.onerror=()=>reject(request.error);}); };
+  const replaceFiles = async (files) => { const db = await openDb(userId); return new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');const store=tx.objectStore('files');store.clear();for(const entry of files)store.put(entry.file,entry.id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('原本ファイルの置換を中止しました。'));}); };
+  const rawState = () => ({ records:read(keys.records,[]), evidences:read(keys.evidences,[]), children:read(keys.children,DEFAULT_CHILDREN), schemaVersion:Number(localStorage.getItem(keys.schema)||SCHEMA_VERSION) });
+  const restoreRawLocalState = (before) => { for(const [key,value] of Object.entries(before)){if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);} };
+  const replaceBackupState = async (next) => {
+    const localBefore={records:localStorage.getItem(keys.records),evidences:localStorage.getItem(keys.evidences),children:localStorage.getItem(keys.children),schema:localStorage.getItem(keys.schema)};
+    const filesBefore=await listFiles();
+    try { await replaceFiles(next.files); write(keys.records,next.records);write(keys.evidences,next.evidences);write(keys.children,next.children);localStorage.setItem(keys.schema,String(next.schemaVersion)); }
+    catch(error){try{await replaceFiles(filesBefore);restoreRawLocalState(localBefore);}catch(rollbackError){throw new Error(`復元に失敗し、ロールバックにも失敗しました: ${rollbackError.message||rollbackError}`);}throw error;}
+  };
   return {
-    userId, loadMigratedState: () => migratePhase1Data({ records:read(keys.records,[]), evidences:read(keys.evidences,[]), children:read(keys.children,DEFAULT_CHILDREN), schemaVersion:Number(localStorage.getItem(keys.schema)||SCHEMA_VERSION) }),
+    userId, loadMigratedState: () => migratePhase1Data(rawState()),
     saveMigratedState: (state) => { write(keys.records,state.records);write(keys.evidences,state.evidences);write(keys.children,state.children);localStorage.setItem(keys.schema,String(SCHEMA_VERSION)); },
     loadConfirmedHistory: () => normalizeConfirmedHistory(readObject(keys.confirmedHistory, {})),
     saveConfirmedHistory: (history) => write(keys.confirmedHistory, normalizeConfirmedHistory(history)),
-    saveFile, getFile, deleteFile,
+    saveFile, getFile, deleteFile, listFiles, loadBackupState:rawState, replaceBackupState,
   };
 }
