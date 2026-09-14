@@ -7,6 +7,7 @@ async function app() { while (!window.receiptApp) await new Promise((resolve) =>
 const element = (selector) => document.querySelector(selector);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
 const rangeInput = () => ({ startDate:element('#periodExpenseStart')?.value || '', endDate:element('#periodExpenseEnd')?.value || '' });
+function setSuggestedPrintName(name) { const previous = document.title; document.title = name; window.addEventListener('afterprint', () => { document.title = previous; }, { once:true }); }
 
 function selectedPeriod(current) {
   const range = rangeInput(); const validation = validatePeriod(range);
@@ -52,7 +53,7 @@ async function install() {
     catch (error) { message.textContent = `提出用資料を出力できません: ${error.message}`; }
   }
   section.addEventListener('input', (event) => { if (event.target.matches('#periodExpenseStart,#periodExpenseEnd')) { previewHost.hidden = true; preview = []; refresh(); } });
-  window.addEventListener('click', (event) => { if (!event.target.closest('#periodExpenseOutput')) return; const period = refresh(); if (!period.validation.valid) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
+  window.addEventListener('click', (event) => { if (!event.target.closest('#periodExpenseOutput')) return; const period = refresh(); if (!period.validation.valid) { event.preventDefault(); event.stopImmediatePropagation(); return; } setSuggestedPrintName(`expense-list-${periodFileSuffix(period)}`); }, true);
   element('#periodExcelOutput').addEventListener('click', () => { const period = refresh(); if (!period.validation.valid) return; try { createWorkbook(period.selectedRecords, selectedEvidencesForRecords(period.selectedRecords, current.getEvidences()), current.getChildren(), `child-expense-${periodFileSuffix(period)}.xlsx`); } catch (error) { message.textContent = error.message; } });
   element('#periodSubmissionOutput').addEventListener('click', exportSubmission); review.addEventListener('click', showPreview);
   previewHost.addEventListener('click', (event) => {

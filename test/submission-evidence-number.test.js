@@ -53,6 +53,7 @@ test('period-scoped submission export is available and preflights originals befo
   assert.match(material, /renderSubmissionExport/);
   assert.match(material, /requireOriginals/);
   assert.match(material, /原本が見つかりません/);
+  assert.match(material, /submission-evidence-/);
 });
 
 test('numbering UI previews before confirmation, warns on reassignment, and supports individual edits', () => {

@@ -9,6 +9,7 @@ const isPdf = (evidence) => evidence?.mimeType === 'application/pdf' || /\.pdf$/
 const submissionNumber = (evidence) => formatSubmissionEvidenceNumber(evidence?.submissionEvidenceNumber) || '提出用証拠番号未採番';
 async function app() { while (!window.receiptApp) await new Promise((resolve) => setTimeout(resolve, 20)); return window.receiptApp; }
 function openView() { let view = document.querySelector('#evidenceSubmissionView'); if (!view) { view = document.createElement('section'); view.id = 'evidenceSubmissionView'; view.className = 'print evidence-submission-view'; document.body.append(view); } return view; }
+function printWithSuggestedName(name = '') { if (!name) { window.print(); return; } const previous = document.title; document.title = name; window.addEventListener('afterprint', () => { document.title = previous; }, { once:true }); window.print(); }
 
 function settlementMarkup(record, evidence) {
   const items = Array.isArray(record.items) ? record.items : [];
@@ -59,7 +60,8 @@ export async function renderSubmission({ receiptId = '', records: suppliedRecord
     host.append(pair);
   }
   if (!host.children.length) host.innerHTML = '<p>出力できる原本証拠がありません。</p>';
-  view.querySelector('[data-print]').onclick = () => window.print();
+  const suggestedPrintName = periodLabel ? `submission-evidence-${periodLabel.replaceAll('-', '').replace(/\s*〜\s*/, '-')}` : '';
+  view.querySelector('[data-print]').onclick = () => printWithSuggestedName(suggestedPrintName);
   view.querySelector('[data-close]').onclick = () => view.remove();
 }
 
