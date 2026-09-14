@@ -1,7 +1,7 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
 import { calculateTaxInclusiveAmount, hasUnappliedTaxExclusiveAmount, taxRateLabel } from './src/item-tax.js';
-import { itemHistoryCandidates, productHistoryCandidates } from './src/confirmed-history.js';
+import { itemHistoryCandidates, knowledgeHistoryCandidates, productHistoryCandidates, taxRateHistoryCandidates } from './src/confirmed-history.js';
 import { PURCHASE_PURPOSE_KNOWLEDGE, purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
 import { taxRateSuggestionsForProduct } from './src/services/taxRateKnowledge.js';
 import {
@@ -90,13 +90,19 @@ function sourceExcerptSummary(value) {
 
 function knowledgeRecommendations(item) {
   const current = selectedKnowledge(item);
-  const recommendations = knowledgeCandidatesForProduct(item.productName).slice(0, 3);
-  if (!recommendations.length) {
+  const history = knowledgeHistoryCandidates(confirmedHistory(), item.productName);
+  const recommendations = knowledgeCandidatesForProduct(item.productName);
+  const seen = new Set();
+  const candidates = [
+    ...history.map((entry) => ({ ...purchasePurposeKnowledgeByKey(entry.knowledgeKey), origin: '過去の確定', useCount: entry.useCount })),
+    ...recommendations.map((entry) => ({ ...entry, origin: '推奨' })),
+  ].filter((entry) => entry?.key && !seen.has(entry.key) && seen.add(entry.key)).slice(0, 3);
+  if (!candidates.length) {
     return '<section class="item-recommendations"><span>Knowledge</span><p>現在: <strong>'
       + esc(current?.category || '未選択') + '</strong></p><p>推奨: なし</p>'
       + '<button type="button" class="small-button" data-action="choose-knowledge">Knowledgeを選ぶ</button></section>';
   }
-  const rows = recommendations.map((entry) => '<div class="item-recommendation"><p>推奨: <strong>' + esc(entry.category) + '</strong></p>'
+  const rows = candidates.map((entry) => '<div class="item-recommendation"><p>' + esc(entry.origin) + ': <strong>' + esc(entry.category) + '</strong></p>'
     + '<p class="help">' + esc(sourceExcerptSummary(entry.sourceExcerpt)) + '</p>'
     + '<button type="button" class="secondary" data-action="apply-knowledge" data-value="'
     + esc(encodeURIComponent(entry.key)) + '">この推奨を使う</button></div>').join('');
@@ -107,17 +113,33 @@ function knowledgeRecommendations(item) {
 
 function taxRateRecommendations(item) {
   const current = taxRateLabel(item.taxRate || 'unknown');
-  const recommendations = taxRateSuggestionsForProduct(item.productName);
+  const history = taxRateHistoryCandidates(confirmedHistory(), item.productName)
+    .map((entry) => ({ suggestedTaxRate: entry.confirmedTaxRate, basis: '過去の人間確定', origin: '過去の確定', useCount: entry.useCount }));
+  const suggestions = taxRateSuggestionsForProduct(item.productName)
+    .map((entry) => ({ ...entry, origin: '推奨' }));
+  const seen = new Set(); const recommendations = [...history, ...suggestions]
+    .filter((entry) => entry.suggestedTaxRate && !seen.has(entry.suggestedTaxRate) && seen.add(entry.suggestedTaxRate)).slice(0, 3);
   if (!recommendations.length) {
     return '<section class="item-recommendations"><span>税率</span><p>現在: <strong>' + esc(current)
       + '</strong></p><p>推奨: なし</p></section>';
   }
-  const buttons = recommendations.map((entry) => '<div class="item-recommendation"><p>推奨: <strong>'
+  const buttons = recommendations.map((entry) => '<div class="item-recommendation"><p>' + esc(entry.origin) + ': <strong>'
     + esc(taxRateLabel(entry.suggestedTaxRate)) + '</strong></p><button type="button" class="secondary" data-action="apply-tax-suggestion" data-value="'
     + esc(entry.suggestedTaxRate) + '">' + esc(taxRateLabel(entry.suggestedTaxRate)) + 'を使う</button></div>').join('');
   const basis = recommendations.map((entry) => esc(entry.basis)).filter((value, index, values) => values.indexOf(value) === index).join(' / ');
   return '<section class="item-recommendations"><span>税率</span><p>現在: <strong>' + esc(current) + '</strong></p>' + buttons
     + '<span class="help"> ' + basis + '。候補であり自動確定しません。</span></section>';
+}
+
+function productHistoryRecommendations(item) {
+  const current = String(item.productName || '');
+  const candidates = productHistoryCandidates(confirmedHistory(), current)
+    .filter((entry) => entry.productName && entry.productName !== current).slice(0, 3);
+  if (!candidates.length) return '';
+  return '<section class="item-recommendations"><span>過去の確定商品名</span>'
+    + candidates.map((entry) => '<div class="item-recommendation"><strong>' + esc(entry.productName) + '</strong> '
+      + '<button type="button" class="secondary" data-action="apply-history-product" data-value="' + esc(encodeURIComponent(entry.productName)) + '">この履歴を使う</button></div>').join('')
+    + '</section>';
 }
 
 function categoryHistoryList(item) {
@@ -228,7 +250,7 @@ function readOnlyRow(item, index) {
     + '<p><span>種別</span><strong>' + esc(category) + '</strong></p>'
     + '<p class="full"><span>購入目的・必要性</span><strong>' + esc(purpose) + '</strong></p>'
     + '<p><span>提出状態</span><strong>' + esc(submissionStatusLabel(item.submissionStatus)) + '</strong></p>'
-    + '</div>' + knowledgeRecommendations(item) + taxRateRecommendations(item)
+    + '</div>' + productHistoryRecommendations(item) + knowledgeRecommendations(item) + taxRateRecommendations(item)
     + '<span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span></article>';
 }
 
@@ -288,6 +310,7 @@ function update(id, field, value, renderAfter = true) {
     item.category = String(value || '').trim();
     item.categorySource = item.knowledgeKey ? 'manual_override' : 'manual';
   } else {
+    if (field === 'productName' && !item.sourceProductName) item.sourceProductName = item.productName;
     item[field] = value;
   }
   item.source = 'manual';
@@ -395,7 +418,10 @@ function handleAction(button) {
   } else if (action === 'apply-knowledge') {
     selectKnowledge(card.dataset.id, decodeURIComponent(button.dataset.value || ''));
   } else if (action === 'apply-tax-suggestion') {
-    update(card.dataset.id, 'taxRate', button.dataset.value || 'unknown');
+    const item = items.find((candidate) => candidate.id === card.dataset.id);
+    const nextRate = button.dataset.value || 'unknown';
+    if (item?.taxRate && item.taxRate !== 'unknown' && item.taxRate !== nextRate && !window.confirm('現在の税率を履歴・候補の税率で置き換えますか？')) return;
+    update(card.dataset.id, 'taxRate', nextRate);
   } else if (action === 'finish-edit') {
     editingItemIds.delete(card.dataset.id);
     render();
@@ -404,9 +430,15 @@ function handleAction(button) {
     const amount = calculateTaxInclusiveAmount(taxExclusiveInputs.get(card.dataset.id), item?.taxRate);
     if (amount != null) update(card.dataset.id, 'amount', amount);
   } else if (action === 'apply-category') {
-    update(card.dataset.id, 'category', decodeURIComponent(button.dataset.value || ''));
+    const item = items.find((candidate) => candidate.id === card.dataset.id);
+    const nextCategory = decodeURIComponent(button.dataset.value || '');
+    if (item?.category && item.category !== nextCategory && !window.confirm('現在の種別を履歴・候補の種別で置き換えますか？')) return;
+    update(card.dataset.id, 'category', nextCategory);
   } else if (action === 'apply-history-product') {
-    update(card.dataset.id, 'productName', decodeURIComponent(button.dataset.value || ''));
+    const item = items.find((candidate) => candidate.id === card.dataset.id);
+    const nextProductName = decodeURIComponent(button.dataset.value || '');
+    if (item?.productName && item.productName !== nextProductName && !window.confirm('現在の商品名を過去の確定商品名で置き換えますか？')) return;
+    update(card.dataset.id, 'productName', nextProductName);
   } else if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
     editingItemIds.delete(card.dataset.id);

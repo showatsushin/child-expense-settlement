@@ -72,6 +72,7 @@ test('vendor candidates expose Reader, OCR, and history groups and append select
   assert.match(vendorUi, /Reader候補/);
   assert.match(vendorUi, /OCR候補/);
   assert.match(vendorUi, /過去に確定した店名/);
+  assert.ok(vendorUi.indexOf("appendGroup('過去に確定した店名：'") < vendorUi.indexOf("appendGroup('Reader候補：'"));
   assert.match(vendorUi, /extractSuggestions\(text\)\.vendors/);
   assert.match(vendorUi, /field\.value=`\$\{current\}（\$\{candidate\}）`/);
   assert.match(vendorUi, /normalizeHistoryText\(current\)\.includes\(normalizeHistoryText\(candidate\)\)/);

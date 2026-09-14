@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   itemHistoryCandidates,
+  knowledgeHistoryCandidates,
   normalizeConfirmedHistory,
   productHistoryCandidates,
   recordConfirmedHistory,
+  sanitizeMerchantHistoryValue,
+  taxRateHistoryCandidates,
   vendorHistoryCandidates,
   vendorHistoryCandidatesForQueries,
 } from '../src/confirmed-history.js';
@@ -14,7 +17,8 @@ import { confirmedHistoryKeyForUser } from '../src/user-storage.js';
 test('registered human-confirmed values are stored separately and ranked as future candidates', () => {
   const confirmed = recordConfirmedHistory({}, {
     vendor: '確認店',
-    items: [{ productName: '飲料水 500ml', category: '飲料水', knowledgeKey: 'drinking_water' }],
+    sourceMerchant: '確認店 レジ表記',
+    items: [{ sourceProductName: '飲料水500ML', productName: '飲料水 500ml', category: '飲料水', knowledgeKey: 'drinking_water', knowledgeVersion: 2, taxRate: '8' }],
     confirmedAt: '2026-09-12T12:00:00.000Z',
   });
 
@@ -23,7 +27,33 @@ test('registered human-confirmed values are stored separately and ranked as futu
   assert.deepEqual(vendorHistoryCandidates(confirmed, '確認').map((entry) => entry.value), ['確認店']);
   assert.deepEqual(productHistoryCandidates(confirmed, '飲料水').map((entry) => entry.productName), ['飲料水 500ml']);
   assert.deepEqual(itemHistoryCandidates(confirmed, '飲料水').map((entry) => entry.knowledgeKey), ['drinking_water']);
+  assert.equal(confirmed.merchantCorrections[0].source, 'user_confirmed_history');
+  assert.equal(confirmed.merchantCorrections[0].sourceValue, '確認店 レジ表記');
+  assert.equal(confirmed.productCorrections[0].confirmedValue, '飲料水 500ml');
+  assert.equal(confirmed.productCorrections[0].sourceValue, '飲料水500ML');
+  assert.equal(knowledgeHistoryCandidates(confirmed, '飲料水')[0].knowledgeKey, 'drinking_water');
+  assert.equal(taxRateHistoryCandidates(confirmed, '飲料水')[0].confirmedTaxRate, '8');
   assert.equal(confirmedHistoryKeyForUser('user-a'), 'child-expense-settlement:user-a:confirmedHistory.v1');
+});
+
+test('tax history ranks human-confirmed rates, ignores unknown, and never mutates an item', () => {
+  const confirmed = recordConfirmedHistory({}, {
+    vendor: '売店',
+    items: [
+      { productName: 'ネピア ティッシュ 5コパック', category: '衛生用品', knowledgeKey: 'general_hygiene', taxRate: '10' },
+      { productName: '未確認商品', category: '', knowledgeKey: null, taxRate: 'unknown' },
+    ],
+    confirmedAt: '2026-09-14T12:00:00.000Z',
+  });
+  const item = { productName: 'ネピア ティッシュ 5コパック', taxRate: 'unknown' };
+  assert.equal(taxRateHistoryCandidates(confirmed, item.productName)[0].confirmedTaxRate, '10');
+  assert.deepEqual(taxRateHistoryCandidates(confirmed, '未確認商品'), []);
+  assert.equal(item.taxRate, 'unknown');
+});
+
+test('merchant history excludes phone, postal code, and labelled address or register details', () => {
+  const merchant = sanitizeMerchantHistoryValue('国立成育医療研究センター 5階売店（くれよん） TEL:03-1234-5678 〒157-8535 住所:東京都世田谷区 レジ番号:12');
+  assert.equal(merchant, '国立成育医療研究センター 5階売店（くれよん）');
 });
 
 test('history normalizes duplicates without becoming an expense, evidence, or automatic selection', () => {

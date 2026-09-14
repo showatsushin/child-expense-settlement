@@ -1,4 +1,5 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from '../node_modules/fflate/esm/browser.js';
+import { normalizeConfirmedHistory } from './confirmed-history.js';
 
 export const BACKUP_FORMAT_VERSION = 1;
 
@@ -11,6 +12,7 @@ const parseJson = (archive, path) => {
   if (!archive[path]) throw new BackupValidationError(`${path} がありません。`);
   try { return JSON.parse(strFromU8(archive[path])); } catch { throw new BackupValidationError(`${path} は正しいJSONではありません。`); }
 };
+const parseOptionalJson = (archive, path, fallback) => archive[path] ? parseJson(archive, path) : fallback;
 const asArray = (value, name) => {
   if (!Array.isArray(value)) throw new BackupValidationError(`${name} は配列ではありません。`);
   return value;
@@ -65,7 +67,7 @@ function verifyPayload({ manifest, records, evidences, children, originals, file
 }
 
 export async function createBackupArchive({ storage, appSchemaVersion, createdAt = new Date().toISOString() }) {
-  const state = storage.loadBackupState(); const records = asArray(state.records, 'records'); const evidences = asArray(state.evidences, 'evidence'); const children = asArray(state.children, 'children');
+  const state = storage.loadBackupState(); const records = asArray(state.records, 'records'); const evidences = asArray(state.evidences, 'evidence'); const children = asArray(state.children, 'children'); const confirmedHistory = normalizeConfirmedHistory(state.confirmedHistory);
   const storedFiles = await storage.listFiles(); const fileById = new Map(storedFiles.map((entry) => [String(entry.id), entry.file]));
   const evidenceIds = new Set(evidences.map((evidence) => String(evidence?.id || '')).filter(Boolean));
   const missingEvidenceBlobIds = evidences.filter((evidence) => !fileById.has(String(evidence?.id || ''))).map((evidence) => String(evidence.id));
@@ -78,7 +80,7 @@ export async function createBackupArchive({ storage, appSchemaVersion, createdAt
   const referencedEvidenceIds = new Set(records.flatMap((record) => Array.isArray(record?.evidenceIds) ? record.evidenceIds.map(String) : []));
   const danglingRecordEvidenceIds = [...referencedEvidenceIds].filter((id) => !evidenceIds.has(id));
   const manifest = { backupFormatVersion:BACKUP_FORMAT_VERSION, appSchemaVersion, createdAt, recordCount:records.length, receiptItemCount:itemCount(records), evidenceCount:evidences.length, originalFileCount:originals.length, integrity:{ missingEvidenceBlobIds, orphanBlobIds, danglingRecordEvidenceIds } };
-  entries['manifest.json'] = json(manifest); entries['data/records.json'] = json(records); entries['data/evidence.json'] = json(evidences); entries['data/children.json'] = json(children); entries['data/originals.json'] = json(originals); entries['data/schema.json'] = json({ schemaVersion:state.schemaVersion });
+  entries['manifest.json'] = json(manifest); entries['data/records.json'] = json(records); entries['data/evidence.json'] = json(evidences); entries['data/children.json'] = json(children); entries['data/confirmed-history.json'] = json(confirmedHistory); entries['data/originals.json'] = json(originals); entries['data/schema.json'] = json({ schemaVersion:state.schemaVersion });
   const warnings = [
     ...missingEvidenceBlobIds.map((id) => `Evidence ${id} の原本Blobがありません。`),
     ...orphanBlobIds.map((id) => `Evidence metadataのない原本Blob ${id} があります。`),
@@ -93,18 +95,18 @@ export async function parseBackupArchive(input, { appSchemaVersion }) {
   try { bytes = input instanceof Uint8Array ? input : new Uint8Array(await input.arrayBuffer()); } catch { throw new BackupValidationError('バックアップファイルを読み取れません。'); }
   let files;
   try { files = unzipSync(bytes); } catch { throw new BackupValidationError('ZIPファイルを解析できません。'); }
-  const manifest = parseJson(files, 'manifest.json'); const records = parseJson(files, 'data/records.json'); const evidences = parseJson(files, 'data/evidence.json'); const children = parseJson(files, 'data/children.json'); const originals = parseJson(files, 'data/originals.json'); const schema = parseJson(files, 'data/schema.json');
+  const manifest = parseJson(files, 'manifest.json'); const records = parseJson(files, 'data/records.json'); const evidences = parseJson(files, 'data/evidence.json'); const children = parseJson(files, 'data/children.json'); const confirmedHistory = normalizeConfirmedHistory(parseOptionalJson(files, 'data/confirmed-history.json', {})); const originals = parseJson(files, 'data/originals.json'); const schema = parseJson(files, 'data/schema.json');
   if (!Number.isInteger(schema?.schemaVersion)) throw new BackupValidationError('保存schemaVersionが不正です。');
   if (schema.schemaVersion !== appSchemaVersion) throw new BackupValidationError(`保存schemaVersion (${schema.schemaVersion}) が現在のアプリ (${appSchemaVersion}) と一致しません。`);
   const checked = verifyPayload({ manifest, records, evidences, children, originals, files }, appSchemaVersion);
   const evidenceById = new Map(checked.evidences.map((evidence) => [String(evidence.id), evidence]));
-  return { manifest, records:checked.records, evidences:checked.evidences, children:checked.children, schemaVersion:schema.schemaVersion, files:checked.originals.map((entry) => ({ id:String(entry.evidenceId), file:new Blob([files[entry.path]], { type:String(evidenceById.get(String(entry.evidenceId))?.mimeType || 'application/octet-stream') }) })) };
+  return { manifest, records:checked.records, evidences:checked.evidences, children:checked.children, confirmedHistory, schemaVersion:schema.schemaVersion, files:checked.originals.map((entry) => ({ id:String(entry.evidenceId), file:new Blob([files[entry.path]], { type:String(evidenceById.get(String(entry.evidenceId))?.mimeType || 'application/octet-stream') }) })) };
 }
 
 export async function restoreBackup({ storage, backup, appSchemaVersion }) {
   const files = new Map(backup.files.map((entry) => [`originals/${encodeURIComponent(entry.id)}.${extensionFor(backup.evidences.find((evidence) => String(evidence.id) === String(entry.id)))}`, new Uint8Array()]));
   verifyPayload({ manifest:backup.manifest, records:backup.records, evidences:backup.evidences, children:backup.children, originals:backup.files.map((entry) => ({ evidenceId:entry.id, path:`originals/${encodeURIComponent(entry.id)}.${extensionFor(backup.evidences.find((evidence) => String(evidence.id) === String(entry.id)))}` })), files }, appSchemaVersion);
-  await storage.replaceBackupState({ records:backup.records, evidences:backup.evidences, children:backup.children, schemaVersion:backup.schemaVersion, files:backup.files });
+  await storage.replaceBackupState({ records:backup.records, evidences:backup.evidences, children:backup.children, confirmedHistory:normalizeConfirmedHistory(backup.confirmedHistory), schemaVersion:backup.schemaVersion, files:backup.files });
   const restored = storage.loadBackupState(); const restoredFiles = await storage.listFiles();
   const manifest = { ...backup.manifest, recordCount:restored.records.length, evidenceCount:restored.evidences.length, originalFileCount:restoredFiles.length, receiptItemCount:itemCount(restored.records) };
   verifyPayload({ manifest, records:restored.records, evidences:restored.evidences, children:restored.children, originals:restored.evidences.map((evidence) => ({ evidenceId:evidence.id, path:`originals/${encodeURIComponent(evidence.id)}.${extensionFor(evidence)}` })), files:new Map(restoredFiles.map((entry) => [`originals/${encodeURIComponent(entry.id)}.${extensionFor(restored.evidences.find((evidence) => String(evidence.id) === String(entry.id)))}`, new Uint8Array()])) }, appSchemaVersion);
