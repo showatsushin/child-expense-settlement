@@ -1,6 +1,6 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
-import { calculateTaxInclusiveAmount } from './src/item-tax.js';
+import { calculateTaxInclusiveAmount, hasUnappliedTaxExclusiveAmount, taxRateLabel } from './src/item-tax.js';
 import { itemHistoryCandidates, productHistoryCandidates } from './src/confirmed-history.js';
 import { purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
 import {
@@ -21,6 +21,8 @@ let cachedOcrCandidates = [];
 let ocrQuality = null;
 let host;
 const taxExclusiveInputs = new Map();
+const editingItemIds = new Set();
+let taxSubmitWarningItems = [];
 
 function totals() {
   const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -28,6 +30,19 @@ function totals() {
     .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const receiptTotal = Number($('#form')?.amount?.value || 0);
   return { itemTotal, claimTotal, receiptTotal, difference: receiptTotal - itemTotal };
+}
+
+function unappliedTaxExclusiveItems() {
+  return items.filter((item) => hasUnappliedTaxExclusiveAmount(item, taxExclusiveInputs.get(item.id)));
+}
+
+function taxSubmitWarning() {
+  if (!taxSubmitWarningItems.length) return '';
+  const names = taxSubmitWarningItems.map((item, index) => esc(item.productName || ('商品 ' + (index + 1)))).join('、');
+  return '<section class="tax-submit-warning" role="alert"><p>税抜入力のまま税込参考額を金額へ反映していない商品が '
+    + taxSubmitWarningItems.length + ' 件あります。確認してから登録してください。</p><p class="help">' + names + '</p>'
+    + '<div><button type="button" class="secondary" data-action="review-tax-submit">確認する</button> '
+    + '<button type="button" class="secondary" data-action="cancel-tax-submit">登録を中止</button></div></section>';
 }
 
 function categoryOptions() {
@@ -120,7 +135,7 @@ function taxControls(item) {
   return '<div class="receipt-item-grid item-tax-fields"><label>金額入力<select data-field="amountInputMode">' + modes + '</select></label><label>税率<select data-field="taxRate">' + rates + '</select></label>' + reference + '</div>';
 }
 
-function row(item, index) {
+function editRow(item, index) {
   const statuses = [
     ['included', '提出する'],
     ['excluded', '提出しない'],
@@ -155,8 +170,36 @@ function row(item, index) {
     + '<label class="full">補足事実<textarea data-field="notes" rows="3">' + esc(item.notes || '') + '</textarea></label>'
     + '<label>提出状態<select data-field="submissionStatus">' + statuses + '</select></label>'
     + '</div>'
+    + '<button type="button" class="secondary finish-item-edit" data-action="finish-edit">修正を完了</button>'
     + '<span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span>'
     + '</article>';
+}
+
+function submissionStatusLabel(value) {
+  return ({ included: '提出する', excluded: '提出しない', review: '要確認' })[value] || '要確認';
+}
+
+function readOnlyRow(item, index) {
+  const purpose = item.purpose?.value || '未入力';
+  const category = item.category || '未分類';
+  return '<article class="receipt-item-card receipt-item-readonly" data-id="' + esc(item.id) + '">'
+    + '<div class="receipt-item-title"><strong>商品 ' + (index + 1)
+    + (item.confidence != null && item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
+    + '<div><button type="button" class="small-button secondary" data-action="edit">修正</button> '
+    + '<button type="button" class="small-button danger" data-action="delete">削除</button></div></div>'
+    + '<div class="receipt-item-grid item-readonly-fields">'
+    + '<p><span>商品名</span><strong>' + esc(item.productName || '未入力') + '</strong></p>'
+    + '<p><span>数量</span><strong>' + esc(item.quantity) + '</strong></p>'
+    + '<p><span>金額</span><strong>' + yen(item.amount) + '</strong></p>'
+    + '<p><span>税率</span><strong>' + esc(taxRateLabel(item.taxRate || 'unknown')) + '</strong></p>'
+    + '<p><span>種別</span><strong>' + esc(category) + '</strong></p>'
+    + '<p class="full"><span>購入目的・必要性</span><strong>' + esc(purpose) + '</strong></p>'
+    + '<p><span>提出状態</span><strong>' + esc(submissionStatusLabel(item.submissionStatus)) + '</strong></p>'
+    + '</div><span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span></article>';
+}
+
+function row(item, index) {
+  return editingItemIds.has(item.id) ? editRow(item, index) : readOnlyRow(item, index);
 }
 
 function autoGrow(textarea) {
@@ -178,6 +221,7 @@ function render() {
     : '';
 
   host.innerHTML = '<h3>商品整理</h3>' + quality
+    + taxSubmitWarning()
     + '<p class="help">Knowledgeは種別・購入目的の初期値と根拠です。最終的な内容は利用者が自由に編集・確定します。</p>'
     + '<datalist id="receiptItemCategories">' + categoryOptions() + '</datalist>'
     + '<datalist id="confirmedProductHistory">' + productHistoryCandidates(confirmedHistory()).map((entry) => '<option value="' + esc(entry.productName) + '"></option>').join('') + '</datalist>'
@@ -214,6 +258,7 @@ function update(id, field, value, renderAfter = true) {
   }
   item.source = 'manual';
   item.confidence = null;
+  taxSubmitWarningItems = [];
   if (renderAfter) render();
 }
 
@@ -283,7 +328,9 @@ function applyOcrCandidates(text) {
 function handleAction(button) {
   const action = button.dataset.action;
   if (action === 'add') {
-    items.push(createReceiptItem({ lineOrder: items.length + 1, submissionStatus: 'review' }));
+    const item = createReceiptItem({ lineOrder: items.length + 1, submissionStatus: 'review' });
+    items.push(item);
+    editingItemIds.add(item.id);
     render();
     return;
   }
@@ -293,8 +340,25 @@ function handleAction(button) {
     return;
   }
   const card = button.closest('[data-id]');
+  if (action === 'review-tax-submit') {
+    taxSubmitWarningItems.forEach((item) => editingItemIds.add(item.id));
+    taxSubmitWarningItems = [];
+    render();
+    return;
+  }
+  if (action === 'cancel-tax-submit') {
+    taxSubmitWarningItems = [];
+    render();
+    return;
+  }
   if (!card) return;
-  if (action === 'apply-tax-inclusive') {
+  if (action === 'edit') {
+    editingItemIds.add(card.dataset.id);
+    render();
+  } else if (action === 'finish-edit') {
+    editingItemIds.delete(card.dataset.id);
+    render();
+  } else if (action === 'apply-tax-inclusive') {
     const item = items.find((candidate) => candidate.id === card.dataset.id);
     const amount = calculateTaxInclusiveAmount(taxExclusiveInputs.get(card.dataset.id), item?.taxRate);
     if (amount != null) update(card.dataset.id, 'amount', amount);
@@ -304,6 +368,8 @@ function handleAction(button) {
     update(card.dataset.id, 'productName', decodeURIComponent(button.dataset.value || ''));
   } else if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
+    editingItemIds.delete(card.dataset.id);
+    taxExclusiveInputs.delete(card.dataset.id);
     render();
   } else if (action === 'restore-knowledge') {
     restoreKnowledgePurpose(card.dataset.id);
@@ -392,12 +458,22 @@ function install() {
     const button = event.target.closest('[data-action]');
     if (button) handleAction(button);
   });
+  form.addEventListener('submit', (event) => {
+    const pending = unappliedTaxExclusiveItems();
+    if (!pending.length) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    taxSubmitWarningItems = pending;
+    render();
+  }, true);
   form.amount?.addEventListener('input', render);
 
   window.receiptItemsController = {
     getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })),
     setItems: (value) => {
       taxExclusiveInputs.clear();
+      editingItemIds.clear();
+      taxSubmitWarningItems = [];
       items = (Array.isArray(value) ? value : []).map((item, index) =>
         createReceiptItem({ ...item, lineOrder: index + 1 }));
       render();
@@ -409,6 +485,8 @@ function install() {
       cachedOcrCandidates = [];
       ocrQuality = null;
       taxExclusiveInputs.clear();
+      editingItemIds.clear();
+      taxSubmitWarningItems = [];
       render();
     },
   };

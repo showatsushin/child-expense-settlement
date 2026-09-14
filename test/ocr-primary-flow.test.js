@@ -55,7 +55,7 @@ test('item card places Knowledge before editable final fields and supports resto
   const items = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 
-  const cardMarkup = items.slice(items.indexOf('function row('), items.indexOf('function autoGrow('));
+  const cardMarkup = items.slice(items.indexOf('function editRow('), items.indexOf('function autoGrow('));
   assert.ok(cardMarkup.indexOf('item-basics') < cardMarkup.indexOf('knowledgeControl(item)'));
   assert.ok(cardMarkup.indexOf('knowledgeControl(item)') < cardMarkup.indexOf('item-edit-fields'));
   assert.match(items, /placeholder="候補から選択または自由入力"/);
@@ -64,6 +64,8 @@ test('item card places Knowledge before editable final fields and supports resto
   assert.match(items, /restoreKnowledgePurpose/);
   assert.match(items, /manual_override/);
   assert.match(items, /keepEditing/);
-  assert.doesNotMatch(items, /readOnly|disabled/);
+  assert.match(items, /editingItemIds/);
+  assert.match(items, /unappliedTaxExclusiveItems/);
+  assert.doesNotMatch(items, /disabled/);
   assert.match(css, /textarea\[data-autogrow\]/);
 });

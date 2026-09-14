@@ -13,3 +13,11 @@ export function calculateTaxInclusiveAmount(taxExclusiveAmount, taxRate) {
   if (!Number.isFinite(amount) || amount < 0 || !['8', '10'].includes(rate)) return null;
   return Math.round(amount * (1 + Number(rate) / 100));
 }
+
+// This only detects an unfinished editor action.  It never derives or mutates
+// ReceiptItem.amount, which remains the final human-confirmed item amount.
+export function hasUnappliedTaxExclusiveAmount(item, taxExclusiveAmount) {
+  if (item?.amountInputMode !== 'tax_excluded' || String(taxExclusiveAmount ?? '').trim() === '') return false;
+  const reference = calculateTaxInclusiveAmount(taxExclusiveAmount, item.taxRate);
+  return reference != null && Number(item.amount) !== reference;
+}

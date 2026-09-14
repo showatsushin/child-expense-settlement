@@ -8,6 +8,7 @@ import { buildEvidenceManifest, receiptEvidenceRows } from '../src/evidence-mani
 import { buildSubmissionBundles } from '../src/submission-bundles.js';
 import { buildWorkbookData } from '../src/output-models.js';
 import { databaseNameForUser } from '../src/user-storage.js';
+import { hasUnappliedTaxExclusiveAmount } from '../src/item-tax.js';
 
 const included = (data) => createReceiptItem({ submissionStatus: 'included', ...data });
 const excluded = (data) => createReceiptItem({ submissionStatus: 'excluded', ...data });
@@ -111,7 +112,18 @@ test('saved receipt item preserves OCR source lines for audit', () => {
   assert.deepEqual(item.sourceLines, ['water', '100']);
 });
 
-test('receipt-item editor exposes manual tax rate and explicit tax-inclusive application only', async () => {
+test('receipt-item editor keeps tax controls in the per-item edit mode', async () => {
   const { readFileSync } = await import('node:fs'); const ui = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
   assert.match(ui, /data-field="taxRate"/); assert.match(ui, /data-field="amountInputMode"/); assert.match(ui, /data-tax-exclusive/); assert.match(ui, /apply-tax-inclusive/);
+  assert.match(ui, /function readOnlyRow/); assert.match(ui, /data-action="edit"/); assert.match(ui, /data-action="finish-edit"/);
+  assert.match(ui, /form\.addEventListener\('submit'/); assert.match(ui, /review-tax-submit/); assert.match(ui, /cancel-tax-submit/);
+  const normalCard = ui.slice(ui.indexOf('function readOnlyRow'), ui.indexOf('function row', ui.indexOf('function readOnlyRow')));
+  assert.doesNotMatch(normalCard, /data-field="taxRate"|data-field="amountInputMode"|data-tax-exclusive|apply-tax-inclusive/);
+});
+
+test('only an entered taxable exclusive amount that differs from amount blocks registration', () => {
+  assert.equal(hasUnappliedTaxExclusiveAmount({ amount: 100, taxRate: '8', amountInputMode: 'tax_excluded' }, 100), true);
+  assert.equal(hasUnappliedTaxExclusiveAmount({ amount: 108, taxRate: '8', amountInputMode: 'tax_excluded' }, 100), false);
+  assert.equal(hasUnappliedTaxExclusiveAmount({ amount: 100, taxRate: 'unknown', amountInputMode: 'tax_excluded' }, 100), false);
+  assert.equal(hasUnappliedTaxExclusiveAmount({ amount: 100, taxRate: '8', amountInputMode: 'tax_included' }, 100), false);
 });
