@@ -1,7 +1,14 @@
 export const PURCHASE_PURPOSE_KNOWLEDGE_VERSION = 2;
 const documentSource = 'user_confirmed_document';
 const confirmedDocument = '各購入目的';
-const entry = (data) => Object.freeze({ ...data, aliases: data.aliases || [], sourceAliases: data.sourceAliases || data.aliases || [], matchingAliases: data.matchingAliases || data.aliases || [], purposeFacts: data.purposeFacts || [], authorityFacts: data.authorityFacts || [], separationFacts: data.separationFacts || [], notes: data.notes || [], version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION });
+const MATCHING_ALIASES_BY_KEY = Object.freeze({
+  drinking_water: ['お茶', 'ジュース'],
+  rehabilitation_training: ['シールブック', 'パズル', '折り紙', '玩具'],
+  food: ['お菓子', 'クッキー', '食品'],
+  bathing_aid: ['入浴剤'],
+  general_hygiene: ['ティッシュ', 'ティシュー', 'ボックスティッシュ', '箱ティッシュ', 'ネピア', '鼻紙', 'ウェットティッシュ', 'ハンドソープ'],
+});
+const entry = (data) => Object.freeze({ ...data, aliases: data.aliases || [], sourceAliases: data.sourceAliases || data.aliases || [], matchingAliases: data.matchingAliases || [...(data.aliases || []), ...(MATCHING_ALIASES_BY_KEY[data.key] || [])], purposeFacts: data.purposeFacts || [], authorityFacts: data.authorityFacts || [], separationFacts: data.separationFacts || [], notes: data.notes || [], version: PURCHASE_PURPOSE_KNOWLEDGE_VERSION });
 export const PURCHASE_PURPOSE_KNOWLEDGE = Object.freeze([
   entry({ key: 'drinking_water', category: '飲料水', aliases: ['飲料水', '水', 'ミネラルウォーター', 'いろはす', 'ペットボトル水'], purposeFacts: ['本人用の飲料水として購入', '問題行為で飲料水がなくなったため購入'], separationFacts: ['母（鈴木さゆり）分は別途購入・別管理・主人へ未請求'], sourceDocument: confirmedDocument, sourceSection: '飲料水', source: documentSource, sourceExcerpt: '娘の強度行動障害による酷い暴れが出て、毎日3本購入しているペットボトル全ての飲料水を自分に掛けたり、床にながしたり等の問題行為で無くなってしまったため、娘の飲料水用として購入。\n※母(鈴木さゆり)の分は別途購入しており、主人へは未請求。レシートも別管理・保管済。' }),
   entry({ key: 'rehabilitation_training', category: 'リハビリ・機能訓練用品', aliases: ['絵本', 'シール', 'シールブック', 'シール遊び', 'パズル', '折り紙', 'お絵かき', '玩具'], purposeFacts: ['脳症後のリハビリ', '機能回復', '手指運動', '巧緻性', '注意・集中', '眼と手の協働', '視覚認知等への刺激'], authorityFacts: ['医師から使用するよう指示あり'], sourceDocument: confirmedDocument, sourceSection: 'リハビリ・機能訓練用品', source: documentSource, sourceExcerpt: '医師から脳症後のリハビリと機能回復のために、絵本・シールあそび・パズル、折り紙、お絵かき、玩具を使用した遊びを含む頭・目・手(指先)を使うことを積極的に行う事で、手指の運動機能や巧緻性だけでなく、注意・集中等の機能への刺激・眼と手の協働、視覚認知等への刺激を促すことを目的として使用するよう指示があったため、購入。' }),

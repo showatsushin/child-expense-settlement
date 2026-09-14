@@ -20,6 +20,7 @@
 .knowledge-source pre{max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:10px 0 0;padding:10px;background:#fff;border:1px solid var(--line);font:inherit}
 .item-edit-fields{margin-top:14px}
 .item-readonly-fields p{margin:0;padding:8px 9px;border:1px solid var(--line);background:#f8fafb;overflow-wrap:anywhere}.item-readonly-fields p span{display:block;color:var(--muted);font-size:12px}.item-readonly-fields p strong{display:block;margin-top:2px}.finish-item-edit{margin-top:14px}.tax-submit-warning{margin:12px 0;padding:12px;border:1px solid #d7a340;background:var(--amber-bg);color:#604100}.tax-submit-warning p{margin-bottom:7px}.tax-submit-warning p:last-of-type{margin-bottom:10px}
+.item-recommendations{margin:10px 0 0;padding:9px;border:1px solid #b9cfd9;background:#f3f8fa}.item-recommendations span:first-child{font-weight:700}.item-recommendations .secondary{margin:3px 3px 3px 0;padding:5px 8px}.item-recommendation-empty{margin:10px 0 0}
 .purpose-field textarea[data-autogrow]{min-height:184px;resize:vertical;overflow:hidden;line-height:1.65}
 .restore-knowledge{width:auto;margin-top:8px}
 .receipt-item-card label:has([data-field="submissionStatus"]){display:none}

@@ -14,6 +14,14 @@ test('Knowledge candidates normalize a capacity qualifier and offer no match whe
   assert.deepEqual(knowledgeCandidatesForProduct('該当しない商品'), []);
 });
 
+test('matching aliases offer deterministic recommendations without changing the Knowledge source', () => {
+  assert.equal(knowledgeCandidatesForProduct('ネピア ティッシュ 5コパック')[0].key, 'general_hygiene');
+  assert.equal(knowledgeCandidatesForProduct('いろはす')[0].key, 'drinking_water');
+  assert.equal(knowledgeCandidatesForProduct('シールブック')[0].key, 'rehabilitation_training');
+  assert.equal(purchasePurposeKnowledgeByKey('general_hygiene').sourceAliases.length, 0);
+  assert.ok(purchasePurposeKnowledgeByKey('general_hygiene').matchingAliases.includes('ティッシュ'));
+});
+
 test('Knowledge candidates may contain more than one matching option', () => {
   const candidates = knowledgeCandidatesForProduct('服薬補助');
   assert.ok(candidates.length >= 2);

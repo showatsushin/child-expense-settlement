@@ -2,7 +2,8 @@ import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
 import { calculateTaxInclusiveAmount, hasUnappliedTaxExclusiveAmount, taxRateLabel } from './src/item-tax.js';
 import { itemHistoryCandidates, productHistoryCandidates } from './src/confirmed-history.js';
-import { purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
+import { PURCHASE_PURPOSE_KNOWLEDGE, purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
+import { taxRateSuggestionsForProduct } from './src/services/taxRateKnowledge.js';
 import {
   applySelectedKnowledge,
   hasManualKnowledgeFields,
@@ -53,24 +54,19 @@ function confirmedHistory() {
   return window.receiptApp?.getConfirmedHistory?.() || {};
 }
 
-function uniqueKnowledge(entries) {
-  return entries.filter((entry, index) => entries.findIndex((candidate) => candidate.key === entry.key) === index);
-}
-
 function knowledgeControl(item) {
   const selected = selectedKnowledge(item);
   const historical = itemHistoryCandidates(confirmedHistory(), item.productName)
     .map((entry) => purchasePurposeKnowledgeByKey(entry.knowledgeKey)).filter(Boolean);
-  const matches = knowledgeCandidatesForProduct(item.productName);
-  const candidates = uniqueKnowledge([selected, ...historical, ...matches].filter(Boolean));
   const historicalKeys = new Set(historical.map((entry) => entry.key));
   const option = (entry) => '<option value="' + esc(entry.key) + '"'
     + (item.knowledgeKey === entry.key ? ' selected' : '') + '>'
     + esc(entry.category) + '</option>';
   const options = [
-    '<option value="">該当なし（手入力）</option>',
-    ...(historicalKeys.size ? ['<optgroup label="過去に確定">', ...candidates.filter((entry) => historicalKeys.has(entry.key)).map(option), '</optgroup>'] : []),
-    ...(candidates.some((entry) => !historicalKeys.has(entry.key)) ? ['<optgroup label="Knowledge候補">', ...candidates.filter((entry) => !historicalKeys.has(entry.key)).map(option), '</optgroup>'] : []),
+    '<option value="">選択してください</option>',
+    ...(historical.length ? ['<optgroup label="過去に確定">', ...historical.map(option), '</optgroup>'] : []),
+    '<optgroup label="全Knowledge一覧">', ...PURCHASE_PURPOSE_KNOWLEDGE.filter((entry) => !historicalKeys.has(entry.key)).map(option), '</optgroup>',
+    '<option value="manual">該当なし（手入力）</option>',
   ].join('');
 
   const source = selected
@@ -85,6 +81,27 @@ function knowledgeControl(item) {
   return '<section class="item-knowledge"><label>購入目的Knowledge'
     + '<select data-knowledge-key>' + options + '</select></label>'
     + source + '</section>';
+}
+
+function knowledgeRecommendations(item) {
+  const recommendations = knowledgeCandidatesForProduct(item.productName).slice(0, 3);
+  if (!recommendations.length) {
+    return '<p class="help item-recommendation-empty">推奨Knowledgeはありません。修正から全Knowledge一覧または手入力を選べます。</p>';
+  }
+  const buttons = recommendations.map((entry) => '<button type="button" class="secondary" data-action="apply-knowledge" data-value="'
+    + esc(encodeURIComponent(entry.key)) + '">' + esc(entry.category) + 'を使う</button>').join(' ');
+  return '<section class="item-recommendations"><span>推奨Knowledge:</span> ' + buttons
+    + ' <button type="button" class="small-button" data-action="choose-knowledge">別のKnowledgeを選ぶ</button></section>';
+}
+
+function taxRateRecommendations(item) {
+  const recommendations = taxRateSuggestionsForProduct(item.productName);
+  if (!recommendations.length) return '';
+  const buttons = recommendations.map((entry) => '<button type="button" class="secondary" data-action="apply-tax-suggestion" data-value="'
+    + esc(entry.suggestedTaxRate) + '">' + esc(taxRateLabel(entry.suggestedTaxRate)) + 'を使う</button>').join(' ');
+  const basis = recommendations.map((entry) => esc(entry.basis)).filter((value, index, values) => values.indexOf(value) === index).join(' / ');
+  return '<section class="item-recommendations"><span>推奨税率:</span> ' + buttons
+    + '<span class="help"> ' + basis + '。候補であり自動確定しません。</span></section>';
 }
 
 function categoryHistoryList(item) {
@@ -195,7 +212,8 @@ function readOnlyRow(item, index) {
     + '<p><span>種別</span><strong>' + esc(category) + '</strong></p>'
     + '<p class="full"><span>購入目的・必要性</span><strong>' + esc(purpose) + '</strong></p>'
     + '<p><span>提出状態</span><strong>' + esc(submissionStatusLabel(item.submissionStatus)) + '</strong></p>'
-    + '</div><span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span></article>';
+    + '</div>' + knowledgeRecommendations(item) + taxRateRecommendations(item)
+    + '<span class="item-basis">' + esc((item.basis || []).join(' / ')) + '</span></article>';
 }
 
 function row(item, index) {
@@ -266,7 +284,7 @@ function selectKnowledge(id, key) {
   const index = items.findIndex((item) => item.id === id);
   if (index < 0) return;
   const current = items[index];
-  if (key && hasManualKnowledgeFields(current)) {
+  if (key && key !== 'manual' && hasManualKnowledgeFields(current)) {
     const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u3092\u3001\u65b0\u3057\u304f\u9078\u629e\u3057\u305fKnowledge\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
     if (!confirmed) { render(); return; }
   }
@@ -355,6 +373,13 @@ function handleAction(button) {
   if (action === 'edit') {
     editingItemIds.add(card.dataset.id);
     render();
+  } else if (action === 'choose-knowledge') {
+    editingItemIds.add(card.dataset.id);
+    render();
+  } else if (action === 'apply-knowledge') {
+    selectKnowledge(card.dataset.id, decodeURIComponent(button.dataset.value || ''));
+  } else if (action === 'apply-tax-suggestion') {
+    update(card.dataset.id, 'taxRate', button.dataset.value || 'unknown');
   } else if (action === 'finish-edit') {
     editingItemIds.delete(card.dataset.id);
     render();

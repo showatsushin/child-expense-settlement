@@ -117,6 +117,8 @@ test('receipt-item editor keeps tax controls in the per-item edit mode', async (
   assert.match(ui, /data-field="taxRate"/); assert.match(ui, /data-field="amountInputMode"/); assert.match(ui, /data-tax-exclusive/); assert.match(ui, /apply-tax-inclusive/);
   assert.match(ui, /function readOnlyRow/); assert.match(ui, /data-action="edit"/); assert.match(ui, /data-action="finish-edit"/);
   assert.match(ui, /form\.addEventListener\('submit'/); assert.match(ui, /review-tax-submit/); assert.match(ui, /cancel-tax-submit/);
+  assert.match(ui, /全Knowledge一覧/); assert.match(ui, /選択してください/); assert.match(ui, /該当なし（手入力）/);
+  assert.match(ui, /apply-knowledge/); assert.match(ui, /apply-tax-suggestion/);
   const normalCard = ui.slice(ui.indexOf('function readOnlyRow'), ui.indexOf('function row', ui.indexOf('function readOnlyRow')));
   assert.doesNotMatch(normalCard, /data-field="taxRate"|data-field="amountInputMode"|data-tax-exclusive|apply-tax-inclusive/);
 });
