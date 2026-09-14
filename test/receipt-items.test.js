@@ -97,7 +97,7 @@ test('submission bundles never mix records and can be scoped to one receipt', ()
 });
 test('workbook contains receipt items, category totals, evidence list and summary', () => {
   const data = buildWorkbookData([createExpenseRecord({ amount: 100, evidenceIds: ['e'], items: [included({ productName: 'x', amount: 100, category: '飲料水' })] })], [{ id: 'e', evidenceNumber: 'E-001', fileName: 'x.jpg', ocr: {} }], []);
-  assert.equal(data.receiptItems[0][0], '証拠番号');
+  assert.deepEqual(data.receiptItems[0].slice(0, 2), ['内部管理番号', '提出用証拠番号']);
   assert.equal(data.category[1][1], 100);
   assert.equal(data.evidence[1][0], 'E-001');
 });

@@ -1,3 +1,5 @@
+import { normalizeSubmissionEvidenceNumber } from './submission-evidence-number.js';
+
 export const SOURCE_TYPES = ['manual', 'ocr', 'ocr_rule', 'template', 'ai', 'knowledge', 'imported'];
 
 export function sourced(value = '', source = 'manual', confidence = null) {
@@ -21,8 +23,8 @@ export function makeId(prefix) {
   return `${prefix}-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
-export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr, status = 'attached' } = {}) {
-  return { id, evidenceNumber, fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','unorganized','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
+export function createEvidenceDocument({ id = makeId('evidence'), evidenceNumber, submissionEvidenceNumber, fileName, mimeType, size = 0, createdAt = new Date().toISOString(), ocr, status = 'attached' } = {}) {
+  return { id, evidenceNumber, submissionEvidenceNumber:normalizeSubmissionEvidenceNumber(submissionEvidenceNumber), fileName: String(fileName || ''), mimeType: String(mimeType || ''), size: Number(size) || 0, createdAt, status: ['draft','unorganized','attached'].includes(status) ? status : 'attached', ocr: normalizeOcr(ocr) };
 }
 
 function normalizePreprocessing(value) {
