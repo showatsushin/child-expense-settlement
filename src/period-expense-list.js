@@ -46,8 +46,16 @@ export function monthDateRange(referenceDate = new Date(), monthOffset = 0) {
   return { start: toDateInputValue(firstDay), end: toDateInputValue(lastDay) };
 }
 
+export const DEFAULT_PERIOD_EXPENSE_PRESET = 'all';
+
+export function periodRangeForPreset(preset, referenceDate = new Date()) {
+  if (preset === 'all') return { start: '', end: '' };
+  return monthDateRange(referenceDate, preset === 'previous' ? -1 : 0);
+}
+
 export function buildPeriodExpenseList(records, { start = '', end = '' } = {}) {
-  const { selectedRecords, excludedUnknownDateRecords } = filterRecordsByPeriod(records, { startDate:start, endDate:end });
+  const source = Array.isArray(records) ? records : [];
+  const { selectedRecords, excludedUnknownDateRecords } = filterRecordsByPeriod(source, { startDate:start, endDate:end });
   const rows = selectedRecords
     .sort((left, right) => String(left?.paidDate || '').localeCompare(String(right?.paidDate || '')))
     .map((record) => ({
@@ -68,5 +76,5 @@ export function buildPeriodExpenseList(records, { start = '', end = '' } = {}) {
     result.submissionTotal += row.submissionTotal;
     result.otherBurdenAmount += row.otherBurdenAmount;
     return result;
-  }, { rows: [], receiptTotal: 0, submissionTotal: 0, otherBurdenAmount: 0, excludedUnknownDateRecords });
+  }, { registeredRecordCount: source.length, rows: [], receiptTotal: 0, submissionTotal: 0, otherBurdenAmount: 0, excludedUnknownDateRecords });
 }

@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildPeriodExpenseList, filterRecordsByPeriod, monthDateRange } from '../src/period-expense-list.js';
+import { buildPeriodExpenseList, DEFAULT_PERIOD_EXPENSE_PRESET, filterRecordsByPeriod, monthDateRange, periodRangeForPreset } from '../src/period-expense-list.js';
 
 test('monthDateRange returns the requested calendar month', () => {
   assert.deepEqual(monthDateRange(new Date(2026, 8, 12)), { start: '2026-09-01', end: '2026-09-30' });
   assert.deepEqual(monthDateRange(new Date(2026, 8, 12), -1), { start: '2026-08-01', end: '2026-08-31' });
+});
+
+test('period expense list defaults to all periods while preserving month presets', () => {
+  assert.equal(DEFAULT_PERIOD_EXPENSE_PRESET, 'all');
+  assert.deepEqual(periodRangeForPreset(DEFAULT_PERIOD_EXPENSE_PRESET, new Date(2026, 8, 12)), { start: '', end: '' });
+  assert.deepEqual(periodRangeForPreset('current', new Date(2026, 8, 12)), { start: '2026-09-01', end: '2026-09-30' });
+  assert.deepEqual(periodRangeForPreset('previous', new Date(2026, 8, 12)), { start: '2026-08-01', end: '2026-08-31' });
 });
 
 test('buildPeriodExpenseList filters by payment date and totals receipt-level values', () => {
@@ -22,9 +29,18 @@ test('buildPeriodExpenseList filters by payment date and totals receipt-level va
 });
 
 test('period list delegates date selection to the common filter', () => {
-  const records = [{ id:'included', paidDate:'2026-09-01' }, { id:'unknown', paidDate:'' }];
+  const records = [{ id:'past', paidDate:'2025-09-01' }, { id:'included', paidDate:'2026-09-01' }, { id:'unknown', paidDate:'' }];
   const filtered = filterRecordsByPeriod(records, { startDate:'2026-09-01', endDate:'2026-09-30' });
   const list = buildPeriodExpenseList(records, { start:'2026-09-01', end:'2026-09-30' });
   assert.deepEqual(list.rows.map((row) => row.record.id), filtered.selectedRecords.map((record) => record.id));
   assert.deepEqual(list.excludedUnknownDateRecords.map((record) => record.id), ['unknown']);
+  assert.equal(list.registeredRecordCount, 3);
+});
+
+test('all-period display includes past valid records and reports unknown paid dates', () => {
+  const records = [{ id:'past', paidDate:'2025-09-01' }, { id:'current', paidDate:'2026-09-01' }, { id:'unknown', paidDate:'' }];
+  const list = buildPeriodExpenseList(records, periodRangeForPreset('all', new Date(2026, 8, 12)));
+  assert.deepEqual(list.rows.map((row) => row.record.id), ['past', 'current']);
+  assert.equal(list.registeredRecordCount, 3);
+  assert.equal(list.excludedUnknownDateRecords.length, 1);
 });
