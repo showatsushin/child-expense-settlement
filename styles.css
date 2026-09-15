@@ -77,10 +77,10 @@ body .top .action-toolbar{display:grid!important;grid-template-columns:repeat(3,
   .action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   #primaryActions #submissionEvidenceExport{grid-column:1/-1}
   #primaryActions button{width:100%!important;min-width:0;min-height:44px!important}
-  .data-protection,.data-diagnostics{grid-template-columns:1fr}
-  .submission-numbering{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .data-protection,.data-diagnostics,.submission-numbering{grid-template-columns:1fr}
   .data-protection-status,.data-protection-preview,.data-diagnostics-status,.data-diagnostics-result,.submission-numbering-status,.submission-numbering-preview,.submission-numbering details{grid-column:1/-1}
   .data-protection button,.data-diagnostics button,.submission-numbering button{min-height:44px!important;width:100%!important}
+  .submission-numbering details summary{min-height:44px;padding:8px 13px;border:1px solid #c7d4d9;border-radius:10px;background:#fff;justify-content:center;text-align:center}
   .period-scoped-actions button{min-height:46px!important;width:100%}
   .receipt-item-card,.submitted-evidence{padding:12px}
   .receipt-item-summary span{width:100%}

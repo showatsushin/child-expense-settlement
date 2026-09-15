@@ -28,5 +28,7 @@ test('responsive CSS protects narrow layouts without changing period-output IDs'
   assert.match(css, /@media\(max-width:768px\)/);
   assert.match(css, /@media\(max-width:480px\)/);
   assert.match(css, /\.period-scoped-actions/);
+  assert.match(css, /\.data-protection,\.data-diagnostics,\.submission-numbering\{grid-template-columns:1fr\}/);
+  assert.match(css, /\.submission-numbering details summary\{min-height:44px/);
   for (const id of ['periodExcelOutput', 'periodSubmissionOutput', 'periodNumberingReview']) assert.match(period, new RegExp(id));
 });
