@@ -26,7 +26,7 @@ async function install() {
   const current = await app(); const section = element('#periodExpenseSection');
   if (!section || element('#periodScopedActions')) return;
   const controls = document.createElement('div');
-  controls.id = 'periodScopedActions'; controls.style.cssText = 'padding:0 14px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center';
+  controls.id = 'periodScopedActions'; controls.className = 'period-scoped-actions';
   controls.innerHTML = '<strong id="periodExportCounts"></strong><button type="button" id="periodExcelOutput">この期間のExcel</button><button type="button" id="periodSubmissionOutput" class="primary">この期間の提出用資料＋原本</button><button type="button" id="periodNumberingReview" hidden>未採番の提出用証拠番号を確認</button><p id="periodExportMessage" class="hint" style="width:100%;margin:0"></p><div id="periodNumberingPreview" hidden style="width:100%;border:1px solid #d2dde1;padding:10px"></div>';
   section.querySelector('#periodExpenseTotals').after(controls);
   const counts = element('#periodExportCounts'); const message = element('#periodExportMessage'); const review = element('#periodNumberingReview'); const previewHost = element('#periodNumberingPreview'); let preview = [];

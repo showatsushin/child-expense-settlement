@@ -18,7 +18,7 @@ function addCameraAndGuide() {
   drop.before(actions);
   const forward = (event) => { const selected = event.target.files?.[0]; if (!selected) return; const transfer = new DataTransfer(); transfer.items.add(selected); file.files = transfer.files; file.dispatchEvent(new Event('change', { bubbles: true })); };
   actions.querySelector('#camera').addEventListener('change', forward); actions.querySelector('#picker').addEventListener('change', forward);
-  const header = document.querySelector('.top > div:last-child'); const guide = document.createElement('button'); guide.id = 'guide'; guide.className = 'guide-trigger'; guide.type = 'button'; guide.textContent = '使い方'; header.prepend(guide);
+  const header = document.querySelector('#accountActions'); const guide = document.createElement('button'); guide.id = 'guide'; guide.className = 'guide-trigger'; guide.type = 'button'; guide.textContent = '使い方'; header.prepend(guide);
   guide.addEventListener('click', () => openGuide());
 }
 

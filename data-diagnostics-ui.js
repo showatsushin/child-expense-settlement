@@ -20,7 +20,7 @@ function textFor(result) {
 }
 
 function setup() {
-  const header = document.querySelector('.top > div:last-child');
+  const header = document.querySelector('#dataProtectionActions');
   if (!header || document.querySelector('#diagnoseStoredData')) return;
   const panel = document.createElement('section'); panel.className = 'data-diagnostics';
   panel.innerHTML = '<button id="diagnoseStoredData" type="button">過去データを診断</button><button id="copyDiagnosticResult" type="button" hidden>診断結果をコピー</button><div id="diagnosticStatus" class="data-diagnostics-status" role="status"></div><pre id="diagnosticResult" class="data-diagnostics-result" hidden></pre>';

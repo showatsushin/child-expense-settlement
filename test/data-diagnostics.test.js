@@ -37,7 +37,7 @@ function fakeUiDocument() {
     return null;
   };
   const header = new Element(); const head = new Element();
-  return { head, header, createElement:() => new Element(), querySelector(selector) { if (selector === '.top > div:last-child') return header; return find(header, selector); } };
+  return { head, header, createElement:() => new Element(), querySelector(selector) { if (selector === '.top > div:last-child' || selector === '#dataProtectionActions') return header; return find(header, selector); } };
 }
 
 test('diagnostic detects legacy and other-user namespaces without exposing record contents', async () => {

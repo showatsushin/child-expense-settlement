@@ -69,22 +69,24 @@ export async function renderSubmission({ receiptId = '', records: suppliedRecord
 async function install() {
   const current = await app();
   current.renderSubmissionExport = (records, options = {}) => renderSubmission({ records, ...options });
-  const header = document.querySelector('.top > div:last-child');
+  const header = document.querySelector('#primaryActions');
   if (!header) return;
   const submission = document.createElement('button');
   submission.type = 'button';
+  submission.id = 'submissionEvidenceExport';
   submission.textContent = '提出用資料＋原本';
   submission.className = 'primary';
   submission.onclick = () => renderSubmission();
   const csv = document.createElement('button');
   csv.type = 'button';
+  csv.id = 'receiptItemsCsv';
   csv.textContent = '購入品CSV';
   csv.onclick = () => {
     const evidenceById = new Map(current.getEvidences().map((evidence) => [evidence.id, evidence]));
     downloadReceiptCsv(makeReceiptItemsCsv(current.getRecords(), evidenceById), 'receipt-items.csv');
     downloadReceiptCsv(makeReceiptSummaryCsv(current.getRecords(), evidenceById), 'receipt-summary.csv');
   };
-  header.append(csv, submission);
+  header.prepend(submission); header.append(csv);
 }
 
 document.addEventListener('click', (event) => {

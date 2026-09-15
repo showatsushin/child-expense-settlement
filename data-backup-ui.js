@@ -9,7 +9,7 @@ function setup() {
   const app = window.receiptApp; if (!app) return;
   const panel = document.createElement('section'); panel.className = 'data-protection'; panel.innerHTML = '<span>データ保全</span> <button id="backupAllData" type="button">全データをバックアップ</button> <button id="restoreBackupFile" type="button">バックアップから復元</button> <input id="restoreBackupInput" type="file" accept=".zip,application/zip" hidden><div id="backupRestoreStatus" class="data-protection-status" role="status"></div><div id="backupRestorePreview" class="data-protection-preview" hidden></div>';
   const style = document.createElement('style'); style.textContent = '.data-protection{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:8px}.data-protection span{font-size:12px;color:#55666f;font-weight:700}.data-protection-status{width:100%;font-size:12px;color:#17603e}.data-protection-preview{width:100%;padding:8px;border:1px solid #d1a554;background:#fff8e8;font-size:12px}.data-protection-preview button{margin-top:6px}.data-protection-error{color:#9d302c}'; document.head.append(style);
-  document.querySelector('.top > div:last-child')?.append(panel);
+  document.querySelector('#dataProtectionActions')?.append(panel);
   const status = panel.querySelector('#backupRestoreStatus'); const preview = panel.querySelector('#backupRestorePreview'); const input = panel.querySelector('#restoreBackupInput'); let selected = null;
   panel.querySelector('#backupAllData').addEventListener('click', async () => {
     status.className = 'data-protection-status'; status.textContent = 'バックアップを作成しています…';
