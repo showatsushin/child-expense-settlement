@@ -497,10 +497,11 @@ function applyReceiptReaderCandidates(reader) {
   };
 }
 
-function install() {
-  if (typeof document === 'undefined') return;
+export function initializeReceiptItems() {
+  if (typeof document === 'undefined') return null;
+  if (window.receiptItemsController) return window.receiptItemsController;
   const form = $('#form');
-  if (!form) return;
+  if (!form) return null;
   host = document.createElement('section');
   host.id = 'receiptItems';
   host.className = 'receipt-items full';
@@ -564,6 +565,5 @@ function install() {
     },
   };
   render();
+  return window.receiptItemsController;
 }
-
-install();
