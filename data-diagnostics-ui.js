@@ -25,6 +25,7 @@ function setup() {
   const panel = document.createElement('section'); panel.className = 'data-diagnostics';
   panel.innerHTML = '<button id="diagnoseStoredData" type="button">過去データを診断</button><button id="copyDiagnosticResult" type="button" hidden>診断結果をコピー</button><div id="diagnosticStatus" class="data-diagnostics-status" role="status"></div><pre id="diagnosticResult" class="data-diagnostics-result" hidden></pre>';
   const style = document.createElement('style'); style.textContent = '.data-diagnostics{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:8px}.data-diagnostics-status{width:100%;font-size:12px;color:#17603e}.data-diagnostics-result{width:100%;max-width:680px;max-height:280px;overflow:auto;margin:0;padding:10px;border:1px solid #b8d4db;border-radius:8px;background:#f5fbfc;white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;color:#24404b}.data-diagnostics-error{color:#9d302c}'; document.head.append(style);
+  header.append(panel);
   const diagnose = panel.querySelector('#diagnoseStoredData'); const copy = panel.querySelector('#copyDiagnosticResult'); const status = panel.querySelector('#diagnosticStatus'); const output = panel.querySelector('#diagnosticResult'); let shareText = '';
   diagnose.addEventListener('click', async () => {
     diagnose.disabled = true; copy.hidden = true; output.hidden = true; status.className = 'data-diagnostics-status'; status.textContent = '保存データを確認しています…';
