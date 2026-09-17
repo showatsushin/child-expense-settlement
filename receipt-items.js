@@ -204,7 +204,7 @@ function editRow(item, index) {
     ? '<button type="button" class="secondary restore-knowledge" data-action="restore-knowledge">Knowledge原文に戻す</button>'
     : '';
 
-  return '<article class="receipt-item-card" data-id="' + esc(item.id) + '">'
+  return '<article class="receipt-item-card" data-id="' + esc(item.id) + '" data-item-id="' + esc(item.id) + '">'
     + '<div class="receipt-item-title"><strong>商品 ' + (index + 1)
     + (item.confidence != null && item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
     + '<button type="button" class="small-button danger" data-action="delete">削除</button></div>'
@@ -239,7 +239,7 @@ function submissionStatusLabel(value) {
 function readOnlyRow(item, index) {
   const purpose = item.purpose?.value || '未入力';
   const category = item.category || '未分類';
-  return '<article class="receipt-item-card receipt-item-readonly" data-id="' + esc(item.id) + '">'
+  return '<article class="receipt-item-card receipt-item-readonly" data-id="' + esc(item.id) + '" data-item-id="' + esc(item.id) + '">'
     + '<div class="receipt-item-title"><strong>商品 ' + (index + 1)
     + (item.confidence != null && item.confidence < 0.65 ? '（要確認）' : '') + '</strong>'
     + '<div><button type="button" class="small-button secondary" data-action="edit">修正</button> '
@@ -266,6 +266,55 @@ function autoGrow(textarea) {
   textarea.style.height = Math.max(textarea.scrollHeight, 184) + 'px';
 }
 
+function itemCard(id) {
+  if (!host) return null;
+  return [...host.querySelectorAll('[data-item-id]')]
+    .find((card) => card.dataset.itemId === id) || null;
+}
+
+function renderTotals() {
+  if (!host) return;
+  const summary = totals();
+  const summaryHost = host.querySelector('.receipt-item-summary');
+  if (!summaryHost) return;
+  summaryHost.innerHTML = '<span>レシート総額 ' + yen(summary.receiptTotal) + '</span>'
+    + '<span>商品明細合計 ' + yen(summary.itemTotal) + '</span>'
+    + '<span class="' + (summary.difference ? 'difference-warning' : '') + '">整合差額 '
+    + (summary.difference ? '差額 ' + yen(summary.difference) : '一致') + '</span>'
+    + '<span>提出対象額 ' + yen(summary.claimTotal) + '</span>';
+}
+
+function renderTaxSubmitWarning() {
+  const warning = host?.querySelector('[data-tax-submit-warning]');
+  if (warning) warning.innerHTML = taxSubmitWarning();
+}
+
+function renderItem(id) {
+  const item = items.find((candidate) => candidate.id === id);
+  const card = itemCard(id);
+  if (!item || !card) return;
+  const template = document.createElement('template');
+  template.innerHTML = row(item, items.indexOf(item));
+  const replacement = template.content.firstElementChild;
+  card.replaceWith(replacement);
+  replacement.querySelectorAll('textarea[data-autogrow]').forEach(autoGrow);
+}
+
+function ocrQualityMarkup() {
+  if (!ocrQuality) return '';
+  return '<p class="ocr-item-quality ' + esc(ocrQuality.status || '') + '">'
+    + (ocrQuality.candidateCount
+      ? '購入品候補 ' + ocrQuality.candidateCount + '件を読み取りました。'
+      : '商品行を自動追加できませんでした。原本を確認して、もう一度読み取ってください。')
+    + (ocrQuality.lowConfidenceCount ? ' 要確認 ' + ocrQuality.lowConfidenceCount + '件' : '')
+    + '</p>';
+}
+
+function renderOcrQuality() {
+  const quality = host?.querySelector('[data-ocr-item-quality]');
+  if (quality) quality.innerHTML = ocrQualityMarkup();
+}
+
 function render() {
   if (!host) return;
   const history = normalizeConfirmedHistory(confirmedHistory());
@@ -280,11 +329,11 @@ function render() {
       + '</p>'
     : '';
 
-  host.innerHTML = '<h3>商品整理</h3>' + quality
-    + taxSubmitWarning()
+  host.innerHTML = '<h3>商品整理</h3><div data-ocr-item-quality>' + quality + '</div>'
     + '<p class="help">Knowledgeは種別・購入目的の初期値と根拠です。最終的な内容は利用者が自由に編集・確定します。</p>'
     + '<datalist id="receiptItemCategories">' + categoryOptions() + '</datalist>'
     + '<datalist id="confirmedProductHistory">' + productHistoryCandidates(history).map((entry) => '<option value="' + esc(entry.productName) + '"></option>').join('') + '</datalist>'
+    + '<div data-tax-submit-warning>' + taxSubmitWarning() + '</div>'
     + '<div class="receipt-item-summary">'
     + '<span>レシート総額 ' + yen(summary.receiptTotal) + '</span>'
     + '<span>商品明細合計 ' + yen(summary.itemTotal) + '</span>'
@@ -301,7 +350,7 @@ function render() {
   host.querySelectorAll('textarea[data-autogrow]').forEach(autoGrow);
 }
 
-function update(id, field, value, renderAfter = true) {
+function update(id, field, value, { renderCard = false, renderSummary = false } = {}) {
   const item = items.find((candidate) => candidate.id === id);
   if (!item) return;
   if (['quantity', 'unitPrice', 'amount'].includes(field)) {
@@ -320,7 +369,9 @@ function update(id, field, value, renderAfter = true) {
   item.source = 'manual';
   item.confidence = null;
   taxSubmitWarningItems = [];
-  if (renderAfter) render();
+  renderTaxSubmitWarning();
+  if (renderCard) renderItem(id);
+  if (renderSummary) renderTotals();
 }
 
 function selectKnowledge(id, key) {
@@ -329,10 +380,10 @@ function selectKnowledge(id, key) {
   const current = items[index];
   if (key && key !== 'manual' && hasManualKnowledgeFields(current)) {
     const confirmed = window.confirm('\u73fe\u5728\u306e\u8cfc\u5165\u76ee\u7684\u3092\u3001\u65b0\u3057\u304f\u9078\u629e\u3057\u305fKnowledge\u539f\u6587\u3067\u7f6e\u304d\u63db\u3048\u307e\u3059\u304b\uff1f');
-    if (!confirmed) { render(); return; }
+    if (!confirmed) return;
   }
   items[index] = applySelectedKnowledge(current, key);
-  render();
+  renderItem(id);
 }
 
 function restoreKnowledgePurpose(id) {
@@ -344,7 +395,7 @@ function restoreKnowledgePurpose(id) {
   item.purposeSource = 'knowledge';
   item.source = 'manual';
   item.confidence = null;
-  render();
+  renderItem(id);
 }
 
 function candidateKey(item) {
@@ -365,7 +416,8 @@ function appendCachedCandidates() {
     ...item,
     lineOrder: items.length + index + 1,
   })));
-  render();
+  if (additions.length) render();
+  else renderOcrQuality();
   return additions.length;
 }
 
@@ -382,7 +434,7 @@ function applyOcrCandidates(text) {
     render();
     return { candidateCount: candidates.length, added: candidates.length, retained: false, headers: result.headers, quality: result.quality };
   }
-  render();
+  renderOcrQuality();
   return { candidateCount: candidates.length, added: 0, retained: items.length > 0, headers: result.headers, quality: result.quality };
 }
 
@@ -402,47 +454,49 @@ function handleAction(button) {
   }
   const card = button.closest('[data-id]');
   if (action === 'review-tax-submit') {
-    taxSubmitWarningItems.forEach((item) => editingItemIds.add(item.id));
+    const reviewIds = taxSubmitWarningItems.map((item) => item.id);
+    reviewIds.forEach((id) => editingItemIds.add(id));
     taxSubmitWarningItems = [];
-    render();
+    renderTaxSubmitWarning();
+    reviewIds.forEach(renderItem);
     return;
   }
   if (action === 'cancel-tax-submit') {
     taxSubmitWarningItems = [];
-    render();
+    renderTaxSubmitWarning();
     return;
   }
   if (!card) return;
   if (action === 'edit') {
     editingItemIds.add(card.dataset.id);
-    render();
+    renderItem(card.dataset.id);
   } else if (action === 'choose-knowledge') {
     editingItemIds.add(card.dataset.id);
-    render();
+    renderItem(card.dataset.id);
   } else if (action === 'apply-knowledge') {
     selectKnowledge(card.dataset.id, decodeURIComponent(button.dataset.value || ''));
   } else if (action === 'apply-tax-suggestion') {
     const item = items.find((candidate) => candidate.id === card.dataset.id);
     const nextRate = button.dataset.value || 'unknown';
     if (item?.taxRate && item.taxRate !== 'unknown' && item.taxRate !== nextRate && !window.confirm('現在の税率を履歴・候補の税率で置き換えますか？')) return;
-    update(card.dataset.id, 'taxRate', nextRate);
+    update(card.dataset.id, 'taxRate', nextRate, { renderCard: true });
   } else if (action === 'finish-edit') {
     editingItemIds.delete(card.dataset.id);
-    render();
+    renderItem(card.dataset.id);
   } else if (action === 'apply-tax-inclusive') {
     const item = items.find((candidate) => candidate.id === card.dataset.id);
     const amount = calculateTaxInclusiveAmount(taxExclusiveInputs.get(card.dataset.id), item?.taxRate);
-    if (amount != null) update(card.dataset.id, 'amount', amount);
+    if (amount != null) update(card.dataset.id, 'amount', amount, { renderCard: true, renderSummary: true });
   } else if (action === 'apply-category') {
     const item = items.find((candidate) => candidate.id === card.dataset.id);
     const nextCategory = decodeURIComponent(button.dataset.value || '');
     if (item?.category && item.category !== nextCategory && !window.confirm('現在の種別を履歴・候補の種別で置き換えますか？')) return;
-    update(card.dataset.id, 'category', nextCategory);
+    update(card.dataset.id, 'category', nextCategory, { renderCard: true });
   } else if (action === 'apply-history-product') {
     const item = items.find((candidate) => candidate.id === card.dataset.id);
     const nextProductName = decodeURIComponent(button.dataset.value || '');
     if (item?.productName && item.productName !== nextProductName && !window.confirm('現在の商品名を過去の確定商品名で置き換えますか？')) return;
-    update(card.dataset.id, 'productName', nextProductName);
+    update(card.dataset.id, 'productName', nextProductName, { renderCard: true });
   } else if (action === 'delete') {
     items = items.filter((item) => item.id !== card.dataset.id);
     editingItemIds.delete(card.dataset.id);
@@ -493,7 +547,7 @@ function applyReceiptReaderCandidates(reader) {
       quality: ocrQuality,
     };
   }
-  render();
+  renderOcrQuality();
   return {
     candidateCount: candidates.length, added: 0, retained: items.length > 0,
     headers: { vendor: result.vendor || '', purchaseDate: result.purchaseDate || '', receiptTotalAmount: result.receiptTotalAmount ?? null },
@@ -517,19 +571,26 @@ export function initializeReceiptItems() {
     if (event.target.dataset.taxExclusive !== undefined) { taxExclusiveInputs.set(card.dataset.id, event.target.value); return; }
     if (!event.target.dataset.field) return;
     const field = event.target.dataset.field;
-    const keepEditing = ['productName', 'category', 'purpose', 'notes'].includes(field);
-    update(card.dataset.id, field, event.target.value, !keepEditing);
+    const keepEditing = ['quantity', 'unitPrice', 'amount'].includes(field);
+    update(card.dataset.id, field, event.target.value, {
+      renderSummary: keepEditing || field === 'submissionStatus',
+    });
     if (field === 'purpose') autoGrow(event.target);
   });
   host.addEventListener('change', (event) => {
     const card = event.target.closest('[data-id]');
     if (!card) return;
     if (event.target.dataset.taxExclusive !== undefined) {
-      taxExclusiveInputs.set(card.dataset.id, event.target.value); render();
+      taxExclusiveInputs.set(card.dataset.id, event.target.value);
+      renderItem(card.dataset.id);
     } else if (event.target.dataset.knowledgeKey !== undefined) {
       selectKnowledge(card.dataset.id, event.target.value);
     } else if (event.target.dataset.field && event.target.dataset.field !== 'purpose') {
-      update(card.dataset.id, event.target.dataset.field, event.target.value);
+      const field = event.target.dataset.field;
+      update(card.dataset.id, field, event.target.value, {
+        renderCard: true,
+        renderSummary: ['quantity', 'unitPrice', 'amount', 'submissionStatus'].includes(field),
+      });
     }
   });
   host.addEventListener('click', (event) => {
@@ -542,9 +603,9 @@ export function initializeReceiptItems() {
     event.preventDefault();
     event.stopImmediatePropagation();
     taxSubmitWarningItems = pending;
-    render();
+    renderTaxSubmitWarning();
   }, true);
-  form.amount?.addEventListener('input', render);
+  form.amount?.addEventListener('input', renderTotals);
 
   window.receiptItemsController = {
     getItems: () => items.map((item, index) => createReceiptItem({ ...item, lineOrder: index + 1 })),

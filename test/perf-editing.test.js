@@ -67,3 +67,38 @@ test('PERF-1 wires OCR flushes before persistence-sensitive transitions and shar
   assert.match(render, /productHistoryCandidates\(history\)/);
   assert.doesNotMatch(render, /productHistoryCandidates\(confirmedHistory\(\)\)/);
 });
+
+test('PERF-2 updates one ReceiptItem card and totals without normal-edit full renders', () => {
+  const ui = readFileSync(new URL('../receipt-items.js', import.meta.url), 'utf8');
+  const renderItem = ui.slice(ui.indexOf('function renderItem('), ui.indexOf('function render()'));
+  const update = ui.slice(ui.indexOf('function update('), ui.indexOf('function selectKnowledge('));
+  const actions = ui.slice(ui.indexOf('function handleAction('), ui.indexOf('function applyReceiptReaderCandidates('));
+  const ocrCandidates = ui.slice(ui.indexOf('function applyOcrCandidates('), ui.indexOf('function handleAction('));
+  const inputHandler = ui.slice(ui.indexOf("host.addEventListener('input'"), ui.indexOf("host.addEventListener('change'"));
+  const changeHandler = ui.slice(ui.indexOf("host.addEventListener('change'"), ui.indexOf("host.addEventListener('click'"));
+
+  assert.match(ui, /data-item-id=/, 'cards have stable item identity independent of their index');
+  assert.match(renderItem, /card\.replaceWith\(replacement\)/);
+  assert.match(renderItem, /replacement\.querySelectorAll\('textarea\[data-autogrow\]'\)/);
+  assert.doesNotMatch(renderItem, /normalizeConfirmedHistory|host\.innerHTML/);
+  assert.match(update, /renderTotals\(\)/);
+  assert.match(update, /renderItem\(id\)/);
+  assert.doesNotMatch(update, /\brender\(\)/, 'normal updates never rebuild the item list');
+  assert.match(ocrCandidates, /renderOcrQuality\(\)/, 'retained OCR candidates update only their quality status');
+
+  assert.match(inputHandler, /const keepEditing = \['quantity', 'unitPrice', 'amount'\]/);
+  assert.match(inputHandler, /renderSummary: keepEditing/);
+  assert.doesNotMatch(inputHandler, /renderCard: true/, 'numeric input keeps its focused input element');
+  assert.match(changeHandler, /renderItem\(card\.dataset\.id\)/, 'tax-exclusive changes update only their card');
+  assert.match(changeHandler, /renderCard: true/, 'select changes update only their card');
+
+  for (const action of ["'edit'", "'choose-knowledge'", "'finish-edit'"]) {
+    const start = actions.indexOf(`action === ${action}`);
+    const next = actions.indexOf('} else if', start + 1);
+    assert.doesNotMatch(actions.slice(start, next < 0 ? undefined : next), /\brender\(\)/);
+  }
+  assert.match(actions, /update\(card\.dataset\.id, 'taxRate', nextRate, \{ renderCard: true \}\)/);
+  assert.match(actions, /update\(card\.dataset\.id, 'amount', amount, \{ renderCard: true, renderSummary: true \}\)/);
+  assert.match(actions, /items\.push\(item\);[\s\S]{0,120}render\(\)/, 'add may rebuild the list');
+  assert.match(actions, /items = items\.filter[\s\S]{0,220}render\(\)/, 'delete may rebuild the list');
+});
