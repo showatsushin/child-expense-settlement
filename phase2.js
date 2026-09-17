@@ -8,11 +8,12 @@ import { validateFile, renderPreview } from './src/file-preview.js';
 import { recognizeImage, extractPdfText } from './src/services/documentRecognition.js';
 import { readReceipt } from './src/services/receiptReaderProvider.js';
 import { extractSuggestions } from './src/ocr-extract.js';
-import { findPotentialDuplicates } from './src/duplicates.js';
+import { findPotentialDuplicates, shouldCheckPotentialDuplicatesForField } from './src/duplicates.js';
 import { buildWorkbookData, buildWordDocumentModel } from './src/output-models.js';
 import { attachedEvidences, attachDraftEvidence, deleteReceiptAndExclusiveEvidence, discardDraftEvidence, discardUnorganizedEvidence, latestDraftEvidence, markEvidenceUnorganized, saveDraftEvidence, unorganizedEvidences } from './src/evidence-lifecycle.js';
 import { normalizeHistoryText, recordConfirmedHistory, vendorHistoryCandidatesForQueries } from './src/confirmed-history.js';
 import { initializeReceiptItems } from './receipt-items.js';
+import { createDebouncedTask } from './src/debounced-task.js';
 
 const $ = (s) => document.querySelector(s); const f = (v) => v?.value ?? v ?? ''; const yen = (n) => `¥${Number(n || 0).toLocaleString('ja-JP')}`;
 const currentUser = await requireAuthenticatedUser();
@@ -20,6 +21,8 @@ const LEGACY_REASON_OPTIONS = ['入院期間中、娘掛かった費用', '入�
 const storage = createUserStorage(currentUser.id);
 const { saveFile, getFile, deleteFile } = storage;
 let state = storage.loadMigratedState(); let records = state.records, evidences = state.evidences, children = state.children; let confirmedHistory = storage.loadConfirmedHistory(); let pendingConfirmedHistoryRecord = null; let readerVendorCandidate = ''; let editId = null, pendingFile = null, pendingEvidenceId = null, pendingOcr = null, sources = {}, previewUrl = null, unorganizedPreviewUrls = [], unorganizedPreviewGeneration = 0;
+const correctedPersistKey = () => pendingEvidenceId && pendingOcr ? `${pendingEvidenceId}\u0000${$('#corrected')?.value || ''}` : null;
+const correctedPersist = createDebouncedTask({ delayMs:650, run:() => persist() });
 window.receiptApp = { getRecords: () => records, getEvidences: () => evidences, getChildren: () => children, getConfirmedHistory: () => confirmedHistory, getFile, storage, setSubmissionEvidenceNumbers: (updates) => { const byId = new Map((updates || []).map((entry) => [entry.evidenceId, entry.submissionEvidenceNumber])); evidences = evidences.map((evidence) => byId.has(evidence.id) ? { ...evidence, submissionEvidenceNumber:byId.get(evidence.id) } : evidence); persist(); render(); } }; queueMicrotask(() => window.dispatchEvent(new Event('receipt-app-ready')));
 const emap = () => new Map(evidences.map((e) => [e.id,e])); const cmap = () => new Map(children.map((c) => [c.id,c]));
 
@@ -69,6 +72,22 @@ periodExpenseSection.addEventListener('click',(event)=>{const preset=event.targe
 setPeriodExpensePreset(DEFAULT_PERIOD_EXPENSE_PRESET);
 
 function persist(){ storage.saveMigratedState({records,evidences,children}); if(pendingConfirmedHistoryRecord){const pending=pendingConfirmedHistoryRecord;confirmedHistory=recordConfirmedHistory(confirmedHistory,{vendor:f(pending.record.vendor),sourceMerchant:pending.sourceMerchant,items:pending.record.items,confirmedAt:pending.record.updatedAt});storage.saveConfirmedHistory(confirmedHistory);pendingConfirmedHistoryRecord=null;renderVendorHistory();} }
+function queuePendingOcrPersist(){const evidence=emap().get(pendingEvidenceId);if(!evidence||!pendingOcr)return;pendingOcr={...pendingOcr,correctedText:$('#corrected').value};evidence.ocr=pendingOcr;const key=correctedPersistKey();if(key)correctedPersist.schedule(key);}
+function flushPendingOcrPersist(){return correctedPersist.flush();}
+function markPendingOcrPersisted(){const key=correctedPersistKey();if(key)correctedPersist.markPersisted(key);}
+function persistPendingOcr(){queuePendingOcrPersist();}
+$('#corrected').addEventListener('blur',flushPendingOcrPersist);
+let duplicateSearchInputField = null;
+$('#form').addEventListener('input',(event)=>{duplicateSearchInputField=event.target.name||'';queueMicrotask(()=>{duplicateSearchInputField=null;});},true);
+const checkDuplicateBase = checkDuplicate;
+checkDuplicate = function checkDuplicateForRelevantInputs(){if(duplicateSearchInputField!==null&&!shouldCheckPotentialDuplicatesForField(duplicateSearchInputField))return;return checkDuplicateBase();};
+$('#form').addEventListener('submit',flushPendingOcrPersist,true);
+$('#resetForm').addEventListener('click',flushPendingOcrPersist,true);
+$('#file').addEventListener('change',flushPendingOcrPersist,true);
+$('#saveUnorganized').addEventListener('click',flushPendingOcrPersist,true);
+$('#rows').addEventListener('click',flushPendingOcrPersist,true);
+$('#evidences').addEventListener('click',flushPendingOcrPersist,true);
+$('#unorganized').addEventListener('click',flushPendingOcrPersist,true);
 function setup(){ const child=$('#child'),cat=$('#category'),set=$('#settlement'),filter=$('#filter'); child.innerHTML='<option value="">選択してください</option>'+children.map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); cat.innerHTML='<option value="">選択してください</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); set.innerHTML=SETTLEMENT_OPTIONS.map(x=>`<option>${x}</option>`).join(''); filter.innerHTML='<option value="">すべての費目</option>'+CATEGORY_OPTIONS.map(x=>`<option>${x}</option>`).join(''); }
 const setupBase = setup;
 setup = function setupLegacyReasonField(){
@@ -202,10 +221,10 @@ async function ocr(){
     $('#progress').textContent=`\u8aad\u307f\u53d6\u308a\u5931\u6557\uff1a${e.message}`;
   }finally{
     const evidence=emap().get(pendingEvidenceId);
-    if(evidence&&pendingOcr){evidence.ocr={...pendingOcr,correctedText:$('#corrected').value};persist();}
+    if(evidence&&pendingOcr){evidence.ocr={...pendingOcr,correctedText:$('#corrected').value};persist();markPendingOcrPersisted();}
     $('#ocr').disabled=false;
   }
-}function persistPendingOcr(){const evidence=emap().get(pendingEvidenceId);if(evidence&&pendingOcr){pendingOcr={...pendingOcr,correctedText:$('#corrected').value};evidence.ocr=pendingOcr;persist();}}
+}
 function sourceValue(name,value){const meta=sources[name]||{source:'manual',confidence:null};return {value,source:meta.source,confidence:meta.confidence};}
 function checkDuplicate(){const form=$('#form'),a=calc();const matches=findPotentialDuplicates({id:editId,paidDate:form.paidDate.value,amount:a.amount,vendor:form.vendor.value},records);const el=$('#duplicate');el.textContent=matches.length?'既存明細と重複している可能性があります（同日・同額・支払先類似）。自動処理はされません。':'';el.classList.toggle('hide',!matches.length);}
 async function save(ev){ev.preventDefault();const form=$('#form'),a=calc();if(!form.paidDate.value||a.amount<=0){$('#msg').textContent='\u652f\u6255\u65e5\u30680\u3088\u308a\u5927\u304d\u3044\u91d1\u984d\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002';return;}let ids=editId?(records.find(r=>r.id===editId)?.evidenceIds||[]):[];if(pendingEvidenceId){ids=attachDraftEvidence({evidenceIds:ids,evidenceId:pendingEvidenceId,evidences,ocr:pendingOcr?{...pendingOcr,correctedText:$('#corrected').value}:undefined});}else if(editId&&pendingOcr){const evidence=emap().get(ids[0]);if(evidence)evidence.ocr={...pendingOcr,correctedText:$('#corrected').value};}const r=createExpenseRecord({id:editId||undefined,evidenceIds:ids,paidDate:form.paidDate.value,amount:sourceValue('amount',a.amount),vendor:sourceValue('vendor',form.vendor.value),childId:sourceValue('childId',form.childId.value),category:sourceValue('category',form.category.value),parentingExpenseStatus:form.parenting.value,specialExpenseStatus:form.special.value,payer:form.payer.value,targetPeriod:form.period.value,reason:sourceValue('reason',form.reason.value),selfBurdenRate:form.selfRate.value,otherBurdenRate:form.otherRate.value,otherBurdenAmount:a.other,alreadyPaidAmount:form.already.value,outstandingAmount:a.out,settlementStatus:form.settlement.value,notes:form.notes.value,receiptTotalAmount:a.amount,items:window.receiptItemsController?.getItems()||[],createdAt:records.find(x=>x.id===editId)?.createdAt});const i=records.findIndex(x=>x.id===r.id);if(i>=0)records[i]=r;else records.push(r);saveConfirmedHistoryFromRecord(r);persist();render();await reset();}

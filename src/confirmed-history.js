@@ -5,6 +5,7 @@ const stamp = () => new Date().toISOString();
 const validDate = (value) => Number.isNaN(new Date(value).getTime()) ? '' : new Date(value).toISOString();
 const count = (value) => Math.max(1, Math.floor(Number(value) || 1));
 const taxRates = new Set(['8', '10', 'exempt', 'out_of_scope']);
+const normalizedHistories = new WeakSet();
 
 // Reuse the STEP 4.5 product normalizer: NFKC, case/space normalization and
 // non-identifying parenthesized qualifiers are removed before history lookup.
@@ -78,13 +79,16 @@ function legacyVendors(source) { return (Array.isArray(source.vendors) ? source.
 function legacyItems(source) { return (Array.isArray(source.items) ? source.items : []).map(normalizeItem).filter(Boolean).reduce((entries, entry) => mergeLegacy(entries, entry, (item) => [normalizeHistoryText(item.productName), normalizeHistoryText(item.category), item.knowledgeKey || ''].join('\u0000')), []); }
 
 export function normalizeConfirmedHistory(value = {}) {
+  if (value && typeof value === 'object' && normalizedHistories.has(value)) return value;
   const source = value && typeof value === 'object' ? value : {}; const vendors = legacyVendors(source); const items = legacyItems(source);
   const merchantFromLegacy = vendors.map((entry) => ({ sourceValue: entry.value, confirmedValue: entry.value, normalizedKey: entry.value, createdAt: entry.lastConfirmedAt, updatedAt: entry.lastConfirmedAt, useCount: entry.count }));
   const productFromLegacy = items.map((entry) => ({ sourceValue: entry.productName, confirmedValue: entry.productName, normalizedKey: entry.productName, createdAt: entry.lastConfirmedAt, updatedAt: entry.lastConfirmedAt, useCount: entry.count }));
   const knowledgeFromLegacy = items.filter((entry) => entry.knowledgeKey).map((entry) => ({ sourceValue: entry.productName, confirmedValue: entry.productName, normalizedKey: entry.productName, knowledgeKey: entry.knowledgeKey, knowledgeVersion: entry.knowledgeVersion, createdAt: entry.lastConfirmedAt, updatedAt: entry.lastConfirmedAt, useCount: entry.count }));
   const categoryFromLegacy = items.filter((entry) => entry.category).map((entry) => ({ sourceValue: entry.productName, confirmedValue: entry.productName, normalizedKey: entry.productName, confirmedCategory: entry.category, createdAt: entry.lastConfirmedAt, updatedAt: entry.lastConfirmedAt, useCount: entry.count }));
   const taxFromLegacy = items.filter((entry) => taxRates.has(entry.taxRate)).map((entry) => ({ sourceValue: entry.productName, confirmedValue: entry.productName, normalizedKey: entry.productName, confirmedTaxRate: entry.taxRate, createdAt: entry.lastConfirmedAt, updatedAt: entry.lastConfirmedAt, useCount: entry.count }));
-  return { ...emptyHistory(), vendors, items, merchantCorrections: normalizeGroup([...(source.merchantCorrections || []), ...merchantFromLegacy], groupConfig.merchantCorrections), productCorrections: normalizeGroup([...(source.productCorrections || []), ...productFromLegacy], groupConfig.productCorrections), knowledgeSelectionHistory: normalizeGroup([...(source.knowledgeSelectionHistory || []), ...knowledgeFromLegacy], groupConfig.knowledgeSelectionHistory), categoryHistory: normalizeGroup([...(source.categoryHistory || []), ...categoryFromLegacy], groupConfig.categoryHistory), taxRateHistory: normalizeGroup([...(source.taxRateHistory || []), ...taxFromLegacy], groupConfig.taxRateHistory) };
+  const normalized = { ...emptyHistory(), vendors, items, merchantCorrections: normalizeGroup([...(source.merchantCorrections || []), ...merchantFromLegacy], groupConfig.merchantCorrections), productCorrections: normalizeGroup([...(source.productCorrections || []), ...productFromLegacy], groupConfig.productCorrections), knowledgeSelectionHistory: normalizeGroup([...(source.knowledgeSelectionHistory || []), ...knowledgeFromLegacy], groupConfig.knowledgeSelectionHistory), categoryHistory: normalizeGroup([...(source.categoryHistory || []), ...categoryFromLegacy], groupConfig.categoryHistory), taxRateHistory: normalizeGroup([...(source.taxRateHistory || []), ...taxFromLegacy], groupConfig.taxRateHistory) };
+  normalizedHistories.add(normalized);
+  return normalized;
 }
 
 function remember(entries, next, config, timestamp) {

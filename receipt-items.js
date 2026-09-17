@@ -1,7 +1,7 @@
 import { createReceiptItem, ITEM_CATEGORY_OPTIONS } from './src/models.js';
 import { analyzeReceiptOcr, extractReceiptItemCandidates } from './src/receipt-item-ocr.js';
 import { calculateTaxInclusiveAmount, hasUnappliedTaxExclusiveAmount, taxRateLabel } from './src/item-tax.js';
-import { itemHistoryCandidates, knowledgeHistoryCandidates, productHistoryCandidates, taxRateHistoryCandidates } from './src/confirmed-history.js';
+import { itemHistoryCandidates, knowledgeHistoryCandidates, normalizeConfirmedHistory, productHistoryCandidates, taxRateHistoryCandidates } from './src/confirmed-history.js';
 import { PURCHASE_PURPOSE_KNOWLEDGE, purchasePurposeKnowledgeByKey } from './src/data/purchasePurposeKnowledge.js';
 import { taxRateSuggestionsForProduct } from './src/services/taxRateKnowledge.js';
 import {
@@ -24,6 +24,7 @@ let host;
 const taxExclusiveInputs = new Map();
 const editingItemIds = new Set();
 let taxSubmitWarningItems = [];
+let renderHistory = null;
 
 function totals() {
   const itemTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -55,8 +56,9 @@ function confirmedHistory() {
 }
 
 function knowledgeControl(item) {
+  const history = renderHistory;
   const selected = selectedKnowledge(item);
-  const historical = itemHistoryCandidates(confirmedHistory(), item.productName)
+  const historical = itemHistoryCandidates(history, item.productName)
     .map((entry) => purchasePurposeKnowledgeByKey(entry.knowledgeKey)).filter(Boolean);
   const historicalKeys = new Set(historical.map((entry) => entry.key));
   const option = (entry) => '<option value="' + esc(entry.key) + '"'
@@ -90,7 +92,7 @@ function sourceExcerptSummary(value) {
 
 function knowledgeRecommendations(item) {
   const current = selectedKnowledge(item);
-  const history = knowledgeHistoryCandidates(confirmedHistory(), item.productName);
+  const history = knowledgeHistoryCandidates(renderHistory, item.productName);
   const recommendations = knowledgeCandidatesForProduct(item.productName);
   const seen = new Set();
   const candidates = [
@@ -113,7 +115,7 @@ function knowledgeRecommendations(item) {
 
 function taxRateRecommendations(item) {
   const current = taxRateLabel(item.taxRate || 'unknown');
-  const history = taxRateHistoryCandidates(confirmedHistory(), item.productName)
+  const history = taxRateHistoryCandidates(renderHistory, item.productName)
     .map((entry) => ({ suggestedTaxRate: entry.confirmedTaxRate, basis: '過去の人間確定', origin: '過去の確定', useCount: entry.useCount }));
   const suggestions = taxRateSuggestionsForProduct(item.productName)
     .map((entry) => ({ ...entry, origin: '推奨' }));
@@ -133,7 +135,7 @@ function taxRateRecommendations(item) {
 
 function productHistoryRecommendations(item) {
   const current = String(item.productName || '');
-  const candidates = productHistoryCandidates(confirmedHistory(), current)
+  const candidates = productHistoryCandidates(renderHistory, current)
     .filter((entry) => entry.productName && entry.productName !== current).slice(0, 3);
   if (!candidates.length) return '';
   return '<section class="item-recommendations"><span>過去の確定商品名</span>'
@@ -145,7 +147,7 @@ function productHistoryRecommendations(item) {
 function categoryHistoryList(item) {
   const id = 'confirmedCategoryHistory-' + esc(item.id);
   const categories = [
-    ...itemHistoryCandidates(confirmedHistory(), item.productName).map((entry) => entry.category),
+    ...itemHistoryCandidates(renderHistory, item.productName).map((entry) => entry.category),
     ...ITEM_CATEGORY_OPTIONS,
   ].filter(Boolean).filter((entry, index, entries) => entries.indexOf(entry) === index);
   return '<datalist id="' + id + '">'
@@ -156,7 +158,7 @@ function categoryHistoryList(item) {
 function categoryCandidateButtons(item) {
   const unique = (values) => values.map((value) => String(value || '').trim()).filter(Boolean)
     .filter((value, index, entries) => entries.indexOf(value) === index);
-  const historical = unique(itemHistoryCandidates(confirmedHistory(), item.productName).map((entry) => entry.category));
+  const historical = unique(itemHistoryCandidates(renderHistory, item.productName).map((entry) => entry.category));
   const existing = ITEM_CATEGORY_OPTIONS.filter((value) => !historical.includes(value));
   const buttons = (categories, className = '') => categories.map((category) => '<button type="button" class="category-candidate-chip ' + className + '" data-action="apply-category" data-value="'
     + esc(encodeURIComponent(category)) + '">' + esc(category) + '</button>').join(' ');
@@ -166,7 +168,7 @@ function categoryCandidateButtons(item) {
 }
 
 function productHistoryButtons(item) {
-  const candidates = productHistoryCandidates(confirmedHistory(), item.productName).slice(0, 5);
+  const candidates = productHistoryCandidates(renderHistory, item.productName).slice(0, 5);
   if (!candidates.length) return '';
   return '<p class="hint">過去に確定した商品名：'
     + candidates.map((entry) => '<button type="button" data-action="apply-history-product" data-value="'
@@ -266,6 +268,8 @@ function autoGrow(textarea) {
 
 function render() {
   if (!host) return;
+  const history = normalizeConfirmedHistory(confirmedHistory());
+  renderHistory = history;
   const summary = totals();
   const quality = ocrQuality
     ? '<p class="ocr-item-quality ' + esc(ocrQuality.status || '') + '">'
@@ -280,7 +284,7 @@ function render() {
     + taxSubmitWarning()
     + '<p class="help">Knowledgeは種別・購入目的の初期値と根拠です。最終的な内容は利用者が自由に編集・確定します。</p>'
     + '<datalist id="receiptItemCategories">' + categoryOptions() + '</datalist>'
-    + '<datalist id="confirmedProductHistory">' + productHistoryCandidates(confirmedHistory()).map((entry) => '<option value="' + esc(entry.productName) + '"></option>').join('') + '</datalist>'
+    + '<datalist id="confirmedProductHistory">' + productHistoryCandidates(history).map((entry) => '<option value="' + esc(entry.productName) + '"></option>').join('') + '</datalist>'
     + '<div class="receipt-item-summary">'
     + '<span>レシート総額 ' + yen(summary.receiptTotal) + '</span>'
     + '<span>商品明細合計 ' + yen(summary.itemTotal) + '</span>'
