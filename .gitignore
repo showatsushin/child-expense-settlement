@@ -7,3 +7,6 @@ dist/
 .env
 worker/.dev.vars
 worker/.wrangler/
+
+# Claude Code のローカル設定（許可したコマンドがそのまま残るため）
+.claude/settings.local.json
